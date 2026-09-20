@@ -16,9 +16,9 @@ export interface StampResult {
 }
 
 /**
- * Creates a server-side default 2-page standard legal PDF document using pdf-lib
+ * Creates a server-side legal PDF document using pdf-lib based on title/template type
  */
-export async function createServerSamplePdf(): Promise<Buffer> {
+export async function createServerSamplePdf(title?: string): Promise<Buffer> {
   const pdfDoc = await PDFDocument.create();
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -26,6 +26,8 @@ export async function createServerSamplePdf(): Promise<Buffer> {
 
   const width = 595.28;
   const height = 841.89;
+  const docTitle = title || 'STANDARD SERVICE LEVEL AGREEMENT (SLA)';
+  const lowerTitle = docTitle.toLowerCase();
 
   // Page 1
   const page1 = pdfDoc.addPage([width, height]);
@@ -37,10 +39,10 @@ export async function createServerSamplePdf(): Promise<Buffer> {
     color: rgb(0.06, 0.09, 0.16),
   });
 
-  page1.drawText('STANDARD SERVICE LEVEL AGREEMENT (SLA)', {
+  page1.drawText(docTitle.toUpperCase(), {
     x: 40,
     y: height - 42,
-    size: 15,
+    size: 14,
     font: helveticaBold,
     color: rgb(1, 1, 1),
   });
@@ -54,34 +56,127 @@ export async function createServerSamplePdf(): Promise<Buffer> {
   });
 
   let y = height - 100;
-  page1.drawText('1. PARTIES TO THE AGREEMENT', { x: 40, y, size: 10, font: helveticaBold, color: rgb(0.15, 0.2, 0.3) });
-  y -= 14;
-  page1.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.8, color: rgb(0.85, 0.88, 0.92) });
-  y -= 18;
 
-  page1.drawText('Client Full Legal Name: ____________________________________________________', { x: 40, y, size: 9, font: helvetica, color: rgb(0.3, 0.35, 0.4) });
-  y -= 22;
-  page1.drawText('13-Digit South African ID: ______________________  SARS VAT No: __________________', { x: 40, y, size: 9, font: helvetica, color: rgb(0.3, 0.35, 0.4) });
-  y -= 30;
+  if (lowerTitle.includes('debit order')) {
+    // Debit Order Form
+    page1.drawText('1. ACCOUNT HOLDER & BANKING DETAILS', { x: 40, y, size: 10, font: helveticaBold, color: rgb(0.15, 0.2, 0.3) });
+    y -= 14;
+    page1.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.8, color: rgb(0.85, 0.88, 0.92) });
+    y -= 18;
 
-  page1.drawText('2. TERMS AND CONDITIONS OF ENGAGEMENT', { x: 40, y, size: 10, font: helveticaBold, color: rgb(0.15, 0.2, 0.3) });
-  y -= 14;
-  page1.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.8, color: rgb(0.85, 0.88, 0.92) });
-  y -= 18;
+    page1.drawText('Account Holder Name: ____________________________________________________', { x: 40, y, size: 9, font: helvetica, color: rgb(0.3, 0.35, 0.4) });
+    y -= 20;
+    page1.drawText('Bank Name: ________________________  Branch Code: ______________________', { x: 40, y, size: 9, font: helvetica, color: rgb(0.3, 0.35, 0.4) });
+    y -= 20;
+    page1.drawText('Account Number: ___________________  Account Type (Cheque/Savings): ______', { x: 40, y, size: 9, font: helvetica, color: rgb(0.3, 0.35, 0.4) });
+    y -= 30;
 
-  const clauses = [
-    '2.1 Scope of Work: The Service Provider agrees to deliver professional software and digital infrastructure services.',
-    '2.2 Monthly Retainer / Service Fee: ZAR ____________________ payable monthly in advance on or before the 1st day.',
-    '2.3 South African Electronic Communications and Transactions Act (ECTA 25 of 2002): The parties agree that electronic',
-    '    signatures executed on this platform are legally valid and binding in accordance with Section 13 of ECTA.',
-    '2.4 Protection of Personal Information Act (POPIA 4 of 2013): All signatory data and records are processed securely',
-    '    with end-to-end encryption and will not be disclosed to unauthorized third parties.',
-    '2.5 Governing Law: This contract shall be governed by and construed in accordance with the laws of South Africa.',
-  ];
+    page1.drawText('2. DEBIT ORDER MANDATE & AUTHORIZATION', { x: 40, y, size: 10, font: helveticaBold, color: rgb(0.15, 0.2, 0.3) });
+    y -= 14;
+    page1.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.8, color: rgb(0.85, 0.88, 0.92) });
+    y -= 18;
 
-  for (const line of clauses) {
-    page1.drawText(line, { x: 40, y, size: 8.5, font: helvetica, color: rgb(0.2, 0.25, 0.3) });
-    y -= 16;
+    const debitClauses = [
+      '2.1 Authority: I/We hereby authorize the Service Provider to issue and deliver payment instructions to my/our bank',
+      '    for collection against the designated account on condition that the sum of such payment instructions will not exceed',
+      '    the agreed monthly service / subscription amount.',
+      '2.2 Monthly Collection Date: Monthly on the 1st / 15th / 25th / Last working day of each calendar month.',
+      '2.3 Mandate Cancellation: This authority and mandate may be cancelled by giving 30 calendar days written notice.',
+      '2.4 ECTA & POPIA: In accordance with the Electronic Communications and Transactions Act 25 of 2002, this electronic',
+      '    mandate has the same legal validity and enforceability as a physical signed document.',
+    ];
+    for (const line of debitClauses) {
+      page1.drawText(line, { x: 40, y, size: 8.5, font: helvetica, color: rgb(0.2, 0.25, 0.3) });
+      y -= 16;
+    }
+  } else if (lowerTitle.includes('rental') || lowerTitle.includes('hardware')) {
+    // Rental Agreement
+    page1.drawText('1. PARTIES & EQUIPMENT SCHEDULE', { x: 40, y, size: 10, font: helveticaBold, color: rgb(0.15, 0.2, 0.3) });
+    y -= 14;
+    page1.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.8, color: rgb(0.85, 0.88, 0.92) });
+    y -= 18;
+
+    page1.drawText('Lessee (Hirer Name): ____________________________________________________', { x: 40, y, size: 9, font: helvetica, color: rgb(0.3, 0.35, 0.4) });
+    y -= 20;
+    page1.drawText('13-Digit SA ID / Reg No: __________________  Contact No: _________________', { x: 40, y, size: 9, font: helvetica, color: rgb(0.3, 0.35, 0.4) });
+    y -= 20;
+    page1.drawText('Equipment Description & Serial Numbers: _________________________________', { x: 40, y, size: 9, font: helvetica, color: rgb(0.3, 0.35, 0.4) });
+    y -= 30;
+
+    page1.drawText('2. RENTAL TERMS & CONDITIONS', { x: 40, y, size: 10, font: helveticaBold, color: rgb(0.15, 0.2, 0.3) });
+    y -= 14;
+    page1.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.8, color: rgb(0.85, 0.88, 0.92) });
+    y -= 18;
+
+    const rentalClauses = [
+      '2.1 Rental Period: 12 / 24 / 36 months starting from the date of physical delivery and commissioning.',
+      '2.2 Monthly Rental Amount: ZAR ____________________ per month, payable in advance by debit order.',
+      '2.3 Ownership & Risk: Ownership remains with the Lessor at all times. Risk of loss passes to the Lessee on delivery.',
+      '2.4 Maintenance & Insurance: The Lessee undertakes to keep equipment insured against theft and accidental damage.',
+      '2.5 South African ECTA Act: Electronic signatures are fully binding under Section 13 of ECTA 25 of 2002.',
+    ];
+    for (const line of rentalClauses) {
+      page1.drawText(line, { x: 40, y, size: 8.5, font: helvetica, color: rgb(0.2, 0.25, 0.3) });
+      y -= 16;
+    }
+  } else if (lowerTitle.includes('cancellation')) {
+    // Cancellation Request
+    page1.drawText('1. ACCOUNT HOLDER & SERVICE DETAILS', { x: 40, y, size: 10, font: helveticaBold, color: rgb(0.15, 0.2, 0.3) });
+    y -= 14;
+    page1.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.8, color: rgb(0.85, 0.88, 0.92) });
+    y -= 18;
+
+    page1.drawText('Client / Account Name: __________________________________________________', { x: 40, y, size: 9, font: helvetica, color: rgb(0.3, 0.35, 0.4) });
+    y -= 20;
+    page1.drawText('Account / Contract Number: _________________  Effective Date: ____________', { x: 40, y, size: 9, font: helvetica, color: rgb(0.3, 0.35, 0.4) });
+    y -= 30;
+
+    page1.drawText('2. NOTICE OF SERVICE TERMINATION', { x: 40, y, size: 10, font: helveticaBold, color: rgb(0.15, 0.2, 0.3) });
+    y -= 14;
+    page1.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.8, color: rgb(0.85, 0.88, 0.92) });
+    y -= 18;
+
+    const cancelClauses = [
+      '2.1 Notice of Cancellation: I/We hereby give official 30-day notice to terminate the specified service contract.',
+      '2.2 Outstanding Balances: All amounts due up to the final date of service remain payable in full.',
+      '2.3 Return of Equipment: Any leased hardware will be returned in good working condition within 7 business days.',
+      '2.4 Legal Validity: This cancellation is executed and confirmed by electronic signature in terms of ECTA 25 of 2002.',
+    ];
+    for (const line of cancelClauses) {
+      page1.drawText(line, { x: 40, y, size: 8.5, font: helvetica, color: rgb(0.2, 0.25, 0.3) });
+      y -= 16;
+    }
+  } else {
+    // Default Master Services Agreement
+    page1.drawText('1. PARTIES TO THE AGREEMENT', { x: 40, y, size: 10, font: helveticaBold, color: rgb(0.15, 0.2, 0.3) });
+    y -= 14;
+    page1.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.8, color: rgb(0.85, 0.88, 0.92) });
+    y -= 18;
+
+    page1.drawText('Client Full Legal Name: ____________________________________________________', { x: 40, y, size: 9, font: helvetica, color: rgb(0.3, 0.35, 0.4) });
+    y -= 22;
+    page1.drawText('13-Digit South African ID: ______________________  SARS VAT No: __________________', { x: 40, y, size: 9, font: helvetica, color: rgb(0.3, 0.35, 0.4) });
+    y -= 30;
+
+    page1.drawText('2. TERMS AND CONDITIONS OF ENGAGEMENT', { x: 40, y, size: 10, font: helveticaBold, color: rgb(0.15, 0.2, 0.3) });
+    y -= 14;
+    page1.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.8, color: rgb(0.85, 0.88, 0.92) });
+    y -= 18;
+
+    const clauses = [
+      '2.1 Scope of Work: The Service Provider agrees to deliver professional software and digital infrastructure services.',
+      '2.2 Monthly Retainer / Service Fee: ZAR ____________________ payable monthly in advance on or before the 1st day.',
+      '2.3 South African Electronic Communications and Transactions Act (ECTA 25 of 2002): The parties agree that electronic',
+      '    signatures executed on this platform are legally valid and binding in accordance with Section 13 of ECTA.',
+      '2.4 Protection of Personal Information Act (POPIA 4 of 2013): All signatory data and records are processed securely',
+      '    with end-to-end encryption and will not be disclosed to unauthorized third parties.',
+      '2.5 Governing Law: This contract shall be governed by and construed in accordance with the laws of South Africa.',
+    ];
+
+    for (const line of clauses) {
+      page1.drawText(line, { x: 40, y, size: 8.5, font: helvetica, color: rgb(0.2, 0.25, 0.3) });
+      y -= 16;
+    }
   }
 
   page1.drawText('Page 1 of 2', { x: width - 90, y: 30, size: 8, font: helvetica, color: rgb(0.5, 0.55, 0.6) });
@@ -96,7 +191,7 @@ export async function createServerSamplePdf(): Promise<Buffer> {
     color: rgb(0.06, 0.09, 0.16),
   });
 
-  page2.drawText('STANDARD SERVICE LEVEL AGREEMENT (SLA) — SIGNATURE EXECUTION', {
+  page2.drawText(`${docTitle.toUpperCase()} — EXECUTION & SIGNATURES`, {
     x: 40,
     y: height - 32,
     size: 11,

@@ -16,7 +16,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       `SELECT r.*,
               d.id as doc_id, d.title as doc_title, d.message as doc_message,
               d.page_count as doc_page_count, d.status as doc_status, d.org_id as doc_org_id,
-              d.signing_order_enforced as doc_signing_order_enforced
+              d.signing_order_enforced as doc_signing_order_enforced,
+              d.pdf_base64 as doc_pdf_base64
        FROM recipients r
        JOIN documents d ON r.document_id = d.id
        WHERE r.token_hash = $1
@@ -88,6 +89,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         pageCount: r.doc_page_count,
         status: r.doc_status,
         signingOrderEnforced: r.doc_signing_order_enforced,
+        pdfBase64: r.doc_pdf_base64 || null,
       },
       fields: fieldsRes.rows,
       isWaitingForPreviousSigner,

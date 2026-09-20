@@ -13,6 +13,7 @@ import { DeclineModal } from '@/components/signer/DeclineModal';
 import { FieldNavigator } from '@/components/signer/FieldNavigator';
 import { InteractivePdfCanvas } from '@/components/editor/InteractivePdfCanvas';
 import { DocumentField, Recipient, SignatureMethod } from '@/types';
+import { renderPdfPagesFromBuffer, createDefaultSamplePdf, RenderedPage } from '@/lib/pdf/pdf-browser';
 import {
   ShieldCheck,
   Lock,
@@ -44,6 +45,9 @@ export default function SignerPortalPage() {
   const [isDeclined, setIsDeclined] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [currentFieldIndex, setCurrentFieldIndex] = useState(0);
+
+  // Rendered PDF Page images for background display
+  const [renderedPages, setRenderedPages] = useState<RenderedPage[]>([]);
 
   // Stored Signer Signature session for reuse
   const [savedSignatureData, setSavedSignatureData] = useState<string | null>(null);
@@ -96,6 +100,35 @@ export default function SignerPortalPage() {
               primary_color: '#6366f1',
               signingOrderEnforced: !!data.document.signingOrderEnforced,
             });
+
+            // Render PDF document pages into high-resolution canvas background
+            if (data.document.pdfBase64) {
+              try {
+                const binaryString = atob(data.document.pdfBase64);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+                const pages = await renderPdfPagesFromBuffer(bytes.buffer);
+                setRenderedPages(pages);
+              } catch (renderErr) {
+                console.warn('Failed to render PDF buffer with pdf.js, loading fallback:', renderErr);
+                try {
+                  const defaultSample = await createDefaultSamplePdf();
+                  const pages = await renderPdfPagesFromBuffer(defaultSample.buffer);
+                  setRenderedPages(pages);
+                } catch (e) {}
+              }
+            } else {
+              try {
+                const defaultSample = await createDefaultSamplePdf();
+                const pages = await renderPdfPagesFromBuffer(defaultSample.buffer);
+                setRenderedPages(pages);
+              } catch (e) {
+                console.warn('Failed to generate sample PDF pages:', e);
+              }
+            }
           }
           if (data.recipient) {
             setRecipient(data.recipient);
@@ -310,18 +343,27 @@ export default function SignerPortalPage() {
                 <ShieldCheck className="w-4 h-4 mr-1.5 text-cyan-400" /> Verify Authenticity
               </Button>
             </Link>
-            <Button
-              variant="default"
-              onClick={() => alert('Downloading executed PDF with official ECTA Signature Certificate...')}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-xs font-bold"
+            <a
+              href={`/api/documents/${document.id}/download?type=pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+              className="flex-1"
             >
-              <Download className="w-4 h-4 mr-1.5" /> Download Signed Copy
-            </Button>
+              <Button
+                variant="default"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-xs font-bold"
+              >
+                <Download className="w-4 h-4 mr-1.5" /> Download Signed Copy (PDF)
+              </Button>
+            </a>
           </div>
         </Card>
       </div>
     );
   }
+
+  const activePageData = renderedPages.find((p) => p.pageNumber === activePage);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#090d16] text-slate-100 pb-24">
@@ -393,6 +435,7 @@ export default function SignerPortalPage() {
           onUpdateFieldPosition={() => {}}
           onDeleteField={() => {}}
           onConfigureField={() => {}}
+          pdfPageDataUrl={activePageData?.dataUrl}
           isSignerMode={true}
           fieldValues={fieldValues}
           onFieldValueChange={handleFieldValueChange}

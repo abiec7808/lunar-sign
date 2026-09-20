@@ -143,12 +143,14 @@ export async function POST(req: NextRequest) {
     const expiresAt = new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString();
 
     // 1. Insert Document into PostgreSQL
+    const pdfBase64ToStore = conversionResult.pdfBuffer ? conversionResult.pdfBuffer.toString('base64') : validated.fileBase64;
+
     const docRes = await dbQuery(
       `INSERT INTO documents (
         org_id, created_by, title, message, original_filename, original_mime_type,
-        storage_path_original, storage_path_pdf, page_count, status, signing_order_enforced,
+        storage_path_original, storage_path_pdf, pdf_base64, page_count, status, signing_order_enforced,
         original_hash, expires_at, reminder_interval_days
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'sent', $10, $11, $12, 1)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'sent', $11, $12, $13, 1)
       RETURNING *`,
       [
         orgId,
@@ -159,6 +161,7 @@ export async function POST(req: NextRequest) {
         validated.mimeType,
         `uploads/${Date.now()}_${validated.originalFilename}`,
         `canonical/${Date.now()}_canonical.pdf`,
+        pdfBase64ToStore,
         conversionResult.pageCount || 1,
         validated.signingOrderEnforced,
         originalHash,
