@@ -32,6 +32,8 @@ const NAV_ITEMS = [
 export function AdminSidebar() {
   const pathname = usePathname();
   const [orgName, setOrgName] = useState<string>('Lunar Sign');
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [primaryColor, setPrimaryColor] = useState<string | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
 
@@ -42,6 +44,8 @@ export function AdminSidebar() {
         const data = await res.json();
         if (data.user) {
           if (data.user.orgName) setOrgName(data.user.orgName);
+          if (data.user.logoUrl) setLogoUrl(data.user.logoUrl);
+          if (data.user.primaryColor) setPrimaryColor(data.user.primaryColor);
           if (data.user.email === 'admin@lunarposgeorge.co.za' || data.user.isSuperAdmin) {
             setIsSuperAdmin(true);
           }
@@ -71,9 +75,20 @@ export function AdminSidebar() {
         {/* Brand Header */}
         <div className="p-4 sm:p-5 flex items-center justify-between border-b border-slate-800/80">
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-400 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/25 shrink-0">
-              🌕
-            </div>
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt={orgName}
+                className="w-9 h-9 rounded-xl object-contain bg-slate-900 border border-slate-800 p-0.5 shrink-0"
+              />
+            ) : (
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shrink-0"
+                style={{ backgroundColor: primaryColor || '#4f46e5' }}
+              >
+                🌕
+              </div>
+            )}
             <div className="overflow-hidden">
               <h1 className="text-sm font-bold text-white tracking-tight leading-tight truncate" title={orgName}>
                 {orgName}
@@ -156,9 +171,20 @@ export function AdminSidebar() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white text-xs shrink-0 shadow">
-            🌕
-          </div>
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt={orgName}
+              className="w-7 h-7 rounded-lg object-contain bg-slate-900 border border-slate-800 p-0.5 shrink-0"
+            />
+          ) : (
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-white text-xs shrink-0 shadow"
+              style={{ backgroundColor: primaryColor || '#4f46e5' }}
+            >
+              🌕
+            </div>
+          )}
           <span className="text-xs font-bold text-white truncate max-w-[180px]">{orgName}</span>
         </div>
       </div>

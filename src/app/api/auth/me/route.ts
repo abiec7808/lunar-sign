@@ -37,6 +37,9 @@ export async function GET() {
         companyRegNumber: data.company_reg_number,
         phone: data.phone,
         address: data.address,
+        logoUrl: data.logo_url,
+        primaryColor: data.primary_color,
+        accentColor: data.accent_color,
         createdAt: session.createdAt,
       },
     });
