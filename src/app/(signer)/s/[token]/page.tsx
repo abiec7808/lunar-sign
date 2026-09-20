@@ -170,6 +170,15 @@ export default function SignerPortalPage() {
               });
             }
             setFieldValues((prev) => ({ ...prev, ...initialVals }));
+
+            // Automatically navigate to the page where this recipient has their fields
+            const myTargetFields = data.fields.filter(
+              (f: any) => f.recipient_id === data.recipient?.id
+            );
+            if (myTargetFields.length > 0) {
+              const targetPage = Math.max(1, Number(myTargetFields[0].page) || 1);
+              setActivePage(targetPage);
+            }
           }
         }
       } catch (err) {
