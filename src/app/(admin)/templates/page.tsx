@@ -271,24 +271,34 @@ export default function TemplatesPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-2 pt-1">
                       <Button
                         variant="outline"
-                        onClick={() => openEditModal(tpl)}
-                        className="w-full border-slate-700 bg-slate-800/60 hover:bg-slate-800 text-xs font-semibold text-slate-200 hover:text-white"
+                        onClick={() => router.push(`/documents/new?templateId=${tpl.id}&mode=edit_template`)}
+                        className="w-full border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-xs font-bold text-indigo-300 hover:text-white transition-all shadow-sm"
                       >
-                        <Edit3 className="w-3.5 h-3.5 mr-1.5 text-indigo-400" /> Edit Template
+                        <Layers className="w-3.5 h-3.5 mr-1.5 text-indigo-400" /> Edit Placeholders & Fields on PDF
                       </Button>
-                      <Button
-                        onClick={() => {
-                          setSelectedTemplateForUse(tpl);
-                          setCustomDocTitle(tpl.name || '');
-                          setCustomDocMessage(tpl.description || 'Please review and sign this agreement.');
-                        }}
-                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition-colors shadow-lg shadow-indigo-600/25"
-                      >
-                        <Send className="w-3.5 h-3.5 mr-1.5" /> Use Template
-                      </Button>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => openEditModal(tpl)}
+                          className="w-full border-slate-700 bg-slate-800/60 hover:bg-slate-800 text-xs font-semibold text-slate-200 hover:text-white"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 mr-1.5 text-slate-400" /> Rename / File
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setSelectedTemplateForUse(tpl);
+                            setCustomDocTitle(tpl.name || '');
+                            setCustomDocMessage(tpl.description || 'Please review and sign this agreement.');
+                          }}
+                          className="w-full bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition-colors shadow-lg shadow-indigo-600/25"
+                        >
+                          <Send className="w-3.5 h-3.5 mr-1.5" /> Use Template
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

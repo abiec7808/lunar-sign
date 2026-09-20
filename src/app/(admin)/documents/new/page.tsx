@@ -263,9 +263,14 @@ function NewDocumentContent() {
               }
             }
 
-            setCurrentStep(2);
-            setTemplateNotification(`Template "${tpl.name}" loaded! Proceed with entering recipient details or edit field placements.`);
-            setTimeout(() => setTemplateNotification(null), 5000);
+            if (isTemplateEditMode) {
+              setCurrentStep(3);
+              setTemplateNotification(`Template "${tpl.name}" loaded in Field Editor! Move, resize, or add placeholders below and click "Save Template Placeholders".`);
+            } else {
+              setCurrentStep(2);
+              setTemplateNotification(`Template "${tpl.name}" loaded! Proceed with entering recipient details or click Step 3 to edit placeholders.`);
+            }
+            setTimeout(() => setTemplateNotification(null), 6000);
           }
         }
       } catch (err) {
@@ -275,7 +280,7 @@ function NewDocumentContent() {
       }
     }
     loadTemplate();
-  }, [templateId]);
+  }, [templateId, isTemplateEditMode]);
 
   // Initialize and render sample PDF on load so canvas is immediately visible if no template loaded
   useEffect(() => {
@@ -773,6 +778,60 @@ function NewDocumentContent() {
         </div>
       </div>
 
+      {/* Interactive Step Navigation Tabs */}
+      <div className="max-w-7xl mx-auto px-6 pt-2 pb-1 w-full">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-900/80 p-1.5 rounded-xl border border-slate-800 text-xs shadow-md">
+          <button
+            type="button"
+            onClick={() => setCurrentStep(1)}
+            className={`py-2 px-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${
+              currentStep === 1
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
+            }`}
+          >
+            <span className="w-5 h-5 rounded-full bg-black/30 flex items-center justify-center text-[10px]">1</span>
+            <span>Document & File</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentStep(2)}
+            className={`py-2 px-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${
+              currentStep === 2
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
+            }`}
+          >
+            <span className="w-5 h-5 rounded-full bg-black/30 flex items-center justify-center text-[10px]">2</span>
+            <span>Signers & Roles ({recipients.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentStep(3)}
+            className={`py-2 px-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${
+              currentStep === 3
+                ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-400/30'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/70 bg-indigo-500/10 border border-indigo-500/20'
+            }`}
+          >
+            <span className="w-5 h-5 rounded-full bg-black/30 flex items-center justify-center text-[10px]">3</span>
+            <span className="font-bold">Placeholders & Fields ({fields.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentStep(4)}
+            className={`py-2 px-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${
+              currentStep === 4
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
+            }`}
+          >
+            <span className="w-5 h-5 rounded-full bg-black/30 flex items-center justify-center text-[10px]">4</span>
+            <span>Review & Pre-fill</span>
+          </button>
+        </div>
+      </div>
+
       {/* STEP 1: UPLOAD & METADATA */}
       {currentStep === 1 && (
         <div className="max-w-3xl w-full mx-auto p-8 space-y-6">
@@ -1054,8 +1113,8 @@ function NewDocumentContent() {
                 })}
               </div>
 
-              {/* Page Navigator */}
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Page Navigator & Quick Template Save */}
+              <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                 <span className="text-xs text-slate-400">Page:</span>
                 {(renderedPages.length > 0 ? renderedPages : [{ pageNumber: 1 }, { pageNumber: 2 }]).map((p, i) => (
                   <button
@@ -1071,6 +1130,19 @@ function NewDocumentContent() {
                     {p.pageNumber}
                   </button>
                 ))}
+
+                {templateId && (
+                  <Button
+                    size="sm"
+                    disabled={isSavingTemplate}
+                    onClick={handleUpdateLoadedTemplate}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-md h-7 px-2.5 ml-1.5"
+                    title="Save all moved, resized, and added placeholders to this template"
+                  >
+                    <BookmarkPlus className="w-3.5 h-3.5 mr-1" />
+                    {isSavingTemplate ? 'Saving...' : 'Save Template Placeholders'}
+                  </Button>
+                )}
               </div>
             </div>
 
