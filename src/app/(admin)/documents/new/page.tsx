@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { FieldPalette } from '@/components/editor/FieldPalette';
 import { InteractivePdfCanvas } from '@/components/editor/InteractivePdfCanvas';
 import { FieldConfigDialog } from '@/components/editor/FieldConfigDialog';
@@ -34,10 +34,13 @@ import {
   FileText,
   Users,
   BookOpen,
+  BookmarkPlus,
 } from 'lucide-react';
 
-export default function NewDocumentPage() {
+function NewDocumentContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const templateId = searchParams.get('templateId');
 
   // Wizard Steps: 1 = Upload & Meta, 2 = Recipients, 3 = Place Fields, 4 = Pre-Fill & Review
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
@@ -47,7 +50,7 @@ export default function NewDocumentPage() {
   const [docMessage, setDocMessage] = useState('Please review and sign this agreement.');
   const [uploadedFileName, setUploadedFileName] = useState('standard_service_agreement.pdf');
   const [signingOrderEnforced, setSigningOrderEnforced] = useState(false);
-  const [autoSaveTemplate, setAutoSaveTemplate] = useState(true);
+  const [autoSaveTemplate, setAutoSaveTemplate] = useState(false);
 
   // PDF Page Rendering State
   const [renderedPages, setRenderedPages] = useState<RenderedPage[]>([]);
@@ -58,6 +61,13 @@ export default function NewDocumentPage() {
   // Address book contacts state
   const [addressBook, setAddressBook] = useState<any[]>([]);
   const [isAddressBookModalOpen, setIsAddressBookModalOpen] = useState(false);
+
+  // Template saving state
+  const [isSaveTemplateModalOpen, setIsSaveTemplateModalOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDescription, setTemplateDescription] = useState('');
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [templateNotification, setTemplateNotification] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadAddressBook() {
@@ -125,9 +135,80 @@ export default function NewDocumentPage() {
     },
   ]);
 
-  // Initialize and render sample PDF on load so canvas is immediately visible
+  // Load Template if templateId is provided in URL
+  useEffect(() => {
+    async function loadTemplate() {
+      if (!templateId) return;
+      try {
+        setIsProcessingPdf(true);
+        const res = await fetch(`/api/templates/${templateId}`);
+        if (res.ok) {
+          const data = await res.json();
+          const tpl = data.template;
+          if (tpl) {
+            setDocTitle(tpl.name || 'Contract Agreement');
+            if (tpl.description) setDocMessage(tpl.description);
+            setTemplateName(tpl.name || '');
+
+            let defs: any = tpl.field_definitions;
+            if (typeof defs === 'string') {
+              try { defs = JSON.parse(defs); } catch (e) {}
+            }
+
+            if (defs) {
+              if (defs.fileBase64) {
+                setFileBase64(defs.fileBase64);
+                const buffer = Buffer.from(defs.fileBase64, 'base64');
+                const arrayBuf = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+                const pages = await renderPdfPagesFromBuffer(arrayBuf);
+                setRenderedPages(pages);
+              }
+              if (Array.isArray(defs.fields) && defs.fields.length > 0) {
+                setFields(defs.fields);
+              } else if (Array.isArray(defs) && defs.length > 0) {
+                setFields(defs);
+              }
+            }
+
+            let rRoles: any = tpl.recipient_roles;
+            if (typeof rRoles === 'string') {
+              try { rRoles = JSON.parse(rRoles); } catch (e) {}
+            }
+            if (Array.isArray(rRoles) && rRoles.length > 0) {
+              setRecipients(
+                rRoles.map((r: any, idx: number) => ({
+                  id: r.id || `recip-${idx + 1}`,
+                  document_id: 'live-doc',
+                  name: r.name || '',
+                  email: r.email || '',
+                  phone: r.phone || '',
+                  role: r.role || 'signer',
+                  order_index: idx,
+                  status: 'pending',
+                  auth_method: r.authMethod || r.auth_method || 'none',
+                  color: getRecipientColor(idx),
+                  created_at: new Date().toISOString(),
+                }))
+              );
+            }
+
+            setTemplateNotification(`Template "${tpl.name}" loaded successfully!`);
+            setTimeout(() => setTemplateNotification(null), 5000);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load template:', err);
+      } finally {
+        setIsProcessingPdf(false);
+      }
+    }
+    loadTemplate();
+  }, [templateId]);
+
+  // Initialize and render sample PDF on load so canvas is immediately visible if no template loaded
   useEffect(() => {
     async function loadDefaultPdf() {
+      if (templateId) return;
       try {
         setIsProcessingPdf(true);
         const { buffer, base64 } = await createDefaultSamplePdf();
@@ -141,7 +222,7 @@ export default function NewDocumentPage() {
       }
     }
     loadDefaultPdf();
-  }, []);
+  }, [templateId]);
 
   // File Upload Handler (PDF, DOCX, Images)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -295,6 +376,48 @@ export default function NewDocumentPage() {
     setSelectedField(updated);
   };
 
+  const handleSaveTemplate = async () => {
+    if (!templateName.trim()) {
+      alert('Please enter a template name.');
+      return;
+    }
+
+    try {
+      setIsSavingTemplate(true);
+      const res = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: templateName.trim(),
+          description: templateDescription.trim() || `Custom template for ${templateName.trim()}`,
+          fields,
+          recipientRoles: recipients.map((r, i) => ({
+            name: r.name,
+            role: r.role,
+            orderIndex: i,
+            authMethod: r.auth_method,
+          })),
+          fileBase64,
+          originalFilename: uploadedFileName,
+        }),
+      });
+
+      if (res.ok) {
+        setIsSaveTemplateModalOpen(false);
+        setTemplateNotification(`Template "${templateName.trim()}" successfully saved to your library!`);
+        setTimeout(() => setTemplateNotification(null), 5000);
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to save template');
+      }
+    } catch (err) {
+      console.error('Error saving template:', err);
+      alert('Failed to save template.');
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
   // Live Send Flow directly to Supabase API
   const handleSendEnvelope = async () => {
     const invalidRecip = recipients.find((r) => !r.email || !r.email.includes('@'));
@@ -373,7 +496,7 @@ export default function NewDocumentPage() {
             : 'Sender Pre-fill & Final Send'
         }`}
         actionButton={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             {currentStep > 1 && (
               <Button
                 variant="outline"
@@ -385,12 +508,17 @@ export default function NewDocumentPage() {
               </Button>
             )}
 
-            {/* Direct Download Preview Button */}
-            <a href="/api/documents/doc-001/download" target="_blank">
-              <Button variant="outline" size="sm" className="text-xs border-slate-700 text-slate-300">
-                <Download className="w-3.5 h-3.5 mr-1 text-cyan-400" /> Download PDF
-              </Button>
-            </a>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setTemplateName(docTitle);
+                setIsSaveTemplateModalOpen(true);
+              }}
+              className="text-xs border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/40"
+            >
+              <BookmarkPlus className="w-3.5 h-3.5 mr-1" /> Save as Template
+            </Button>
 
             {currentStep < 4 ? (
               <Button
@@ -416,6 +544,17 @@ export default function NewDocumentPage() {
           </div>
         }
       />
+
+      {templateNotification && (
+        <div className="max-w-7xl mx-auto px-6 pt-4 w-full">
+          <div className="p-3 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs flex items-center justify-between shadow-lg">
+            <span>{templateNotification}</span>
+            <button onClick={() => setTemplateNotification(null)} className="text-emerald-400 hover:text-emerald-200">
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* STEP 1: UPLOAD & METADATA */}
       {currentStep === 1 && (
@@ -786,6 +925,62 @@ export default function NewDocumentPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Save Template Modal Dialog */}
+      <Dialog open={isSaveTemplateModalOpen} onOpenChange={setIsSaveTemplateModalOpen}>
+        <DialogContent className="max-w-md bg-slate-900 border-slate-700 text-white shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold flex items-center gap-2">
+              <BookmarkPlus className="w-5 h-5 text-indigo-400" /> Save as Reusable Template
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 my-2 text-xs">
+            <div>
+              <Label className="text-slate-300">Template Name</Label>
+              <Input
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="e.g. Standard NDA / Service Agreement"
+                className="mt-1 bg-slate-950 border-slate-700 text-xs"
+              />
+            </div>
+            <div>
+              <Label className="text-slate-300">Description</Label>
+              <Textarea
+                value={templateDescription}
+                onChange={(e) => setTemplateDescription(e.target.value)}
+                placeholder="Brief description of this template and when to use it..."
+                rows={3}
+                className="mt-1 bg-slate-950 border-slate-700 text-xs"
+              />
+            </div>
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1 text-slate-400 text-[11px]">
+              <div>• Configured Fields: <strong className="text-slate-200">{fields.length} placeholders</strong></div>
+              <div>• Configured Signer Roles: <strong className="text-slate-200">{recipients.length} roles</strong></div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsSaveTemplateModalOpen(false)}
+              className="text-xs border-slate-700 text-slate-300"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={isSavingTemplate}
+              onClick={handleSaveTemplate}
+              className="bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25"
+            >
+              {isSavingTemplate ? 'Saving...' : 'Save Template'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Field Configuration Dialog */}
       <FieldConfigDialog
         isOpen={isConfigDialogOpen}
@@ -798,3 +993,12 @@ export default function NewDocumentPage() {
     </div>
   );
 }
+
+export default function NewDocumentPage() {
+  return (
+    <Suspense fallback={<div className="flex-1 p-8 text-xs text-slate-500 bg-[#090d16]">Loading document editor...</div>}>
+      <NewDocumentContent />
+    </Suspense>
+  );
+}
+

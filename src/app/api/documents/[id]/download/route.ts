@@ -32,7 +32,7 @@ export async function GET(
 
     if (doc) {
       const [fieldsRes, sigsRes, recipsRes, auditRes] = await Promise.all([
-        dbQuery(`SELECT * FROM document_fields WHERE document_id = $1 ORDER BY page ASC`, [doc.id]),
+        dbQuery(`SELECT * FROM fields WHERE document_id = $1 ORDER BY page ASC, y_pct ASC`, [doc.id]),
         dbQuery(`SELECT * FROM signatures WHERE document_id = $1`, [doc.id]),
         dbQuery(`SELECT * FROM recipients WHERE document_id = $1 ORDER BY order_index ASC`, [doc.id]),
         dbQuery(`SELECT * FROM audit_events WHERE document_id = $1 ORDER BY created_at ASC`, [doc.id]),
@@ -44,39 +44,7 @@ export async function GET(
       auditEvents = auditRes.rows;
     }
 
-    // If no recipients in DB (e.g. testing), provide standard 2 signatories
-    if (recipients.length === 0) {
-      recipients = [
-        {
-          id: 'r-1',
-          document_id: id,
-          name: 'Johan Van Der Merwe',
-          email: 'johan@example.co.za',
-          role: 'signer',
-          order_index: 0,
-          status: 'signed',
-          auth_method: 'none',
-          consent_given_at: new Date().toISOString(),
-          signed_at: new Date().toISOString(),
-          ip_address: '105.213.44.12 (Cape Town, ZA)',
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: 'r-2',
-          document_id: id,
-          name: 'Lunar Administrator',
-          email: 'admin@lunarposgeorge.co.za',
-          role: 'signer',
-          order_index: 1,
-          status: 'signed',
-          auth_method: 'none',
-          consent_given_at: new Date().toISOString(),
-          signed_at: new Date().toISOString(),
-          ip_address: '197.97.100.88 (George, ZA)',
-          created_at: new Date().toISOString(),
-        },
-      ];
-    }
+    // 3. Stamp, Flatten, and draw Digital Signature approval boxes
 
     // 3. Stamp, Flatten, and draw Digital Signature approval boxes
     const stampedResult = await stampAndFlattenPdf({

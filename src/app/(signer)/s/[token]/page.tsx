@@ -48,21 +48,21 @@ export default function SignerPortalPage() {
   // Stored Signer Signature session for reuse
   const [savedSignatureData, setSavedSignatureData] = useState<string | null>(null);
 
-  // Mock Envelope Data
+  // Dynamic Envelope Data from Database
   const [document, setDocument] = useState({
-    id: 'doc-001',
-    title: 'Standard South African Service Level Agreement (SLA)',
-    sender_name: 'LunarPOS George / Computer Home Services',
-    page_count: 2,
-    org_name: 'LunarPOS George',
+    id: token,
+    title: 'Loading Agreement...',
+    sender_name: 'Lunar Document Issuer',
+    page_count: 1,
+    org_name: 'Lunar Sign',
     primary_color: '#6366f1',
   });
 
   const [recipient, setRecipient] = useState<Recipient>({
-    id: 'recip-1',
-    document_id: 'doc-001',
-    name: 'Johan Van Der Merwe',
-    email: 'johan@example.co.za',
+    id: 'recip-current',
+    document_id: token,
+    name: 'Signatory',
+    email: '',
     role: 'signer',
     order_index: 0,
     status: 'opened',
@@ -70,63 +70,8 @@ export default function SignerPortalPage() {
     created_at: new Date().toISOString(),
   });
 
-  const [fields, setFields] = useState<DocumentField[]>([
-    {
-      id: 'f-1',
-      document_id: 'doc-001',
-      recipient_id: 'recip-1',
-      type: 'full_name',
-      page: 1,
-      x_pct: 15,
-      y_pct: 35,
-      width_pct: 32,
-      height_pct: 3.2,
-      required: true,
-      label: 'Full Legal Name',
-      value: 'Johan Van Der Merwe',
-      read_only: false,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'f-2',
-      document_id: 'doc-001',
-      recipient_id: 'recip-1',
-      type: 'sa_id',
-      page: 1,
-      x_pct: 55,
-      y_pct: 35,
-      width_pct: 28,
-      height_pct: 3.2,
-      required: true,
-      label: '13-Digit SA ID',
-      value: '',
-      read_only: false,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'f-3',
-      document_id: 'doc-001',
-      recipient_id: 'recip-1',
-      type: 'signature',
-      page: 2,
-      x_pct: 15,
-      y_pct: 70,
-      width_pct: 26,
-      height_pct: 5.5,
-      required: true,
-      label: 'Client Signature',
-      value: '',
-      read_only: false,
-      created_at: new Date().toISOString(),
-    },
-  ]);
-
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({
-    'f-1': 'Johan Van Der Merwe',
-    'f-2': '9001015009086',
-    'f-3': '',
-  });
-
+  const [fields, setFields] = useState<DocumentField[]>([]);
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [activePage, setActivePage] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 

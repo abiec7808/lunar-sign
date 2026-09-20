@@ -41,28 +41,17 @@ export default function DocumentDetailPage() {
 
   const [document, setDocument] = useState<any>({
     id: docId,
-    title: 'Standard Service Level Agreement (SLA)',
+    title: 'Loading Agreement...',
     status: 'sent',
-    page_count: 2,
-    original_filename: 'service_agreement.pdf',
+    page_count: 1,
+    original_filename: 'agreement.pdf',
     original_hash: '—',
     final_hash: '—',
     created_at: new Date().toISOString(),
     completed_at: null,
   });
 
-  const [recipients, setRecipients] = useState<any[]>([
-    {
-      id: 'r-1',
-      name: 'Johan Van Der Merwe',
-      email: 'johan@example.co.za',
-      role: 'signer',
-      status: 'pending',
-      auth_method: 'none',
-      token: 'sample_token',
-    },
-  ]);
-
+  const [recipients, setRecipients] = useState<any[]>([]);
   const [auditEvents, setAuditEvents] = useState<any[]>([]);
 
   useEffect(() => {
