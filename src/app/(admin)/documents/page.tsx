@@ -46,6 +46,8 @@ import {
   Users,
   BookOpen,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
   LayoutTemplate,
 } from 'lucide-react';
 import { formatSaDate } from '@/lib/dates';
@@ -69,7 +71,16 @@ export default function DocumentsListPage() {
   const [templateDocMessage, setTemplateDocMessage] = useState('Please review and sign this agreement.');
   const [templateSigningOrder, setTemplateSigningOrder] = useState(false);
   const [templateSigners, setTemplateSigners] = useState<
-    Array<{ name: string; email: string; phone: string; role: string; authMethod: string }>
+    Array<{
+      id: string;
+      templateSlotIndex: number;
+      name: string;
+      email: string;
+      phone: string;
+      role: 'signer' | 'approver' | 'filler' | 'viewer';
+      label: string;
+      authMethod: string;
+    }>
   >([]);
   const [isDispatchingTemplate, setIsDispatchingTemplate] = useState(false);
   const [addressBook, setAddressBook] = useState<any[]>([]);
@@ -155,27 +166,72 @@ export default function DocumentsListPage() {
       if (Array.isArray(r) && r.length > 0) parsedRoles = r;
     } catch (e) {}
 
+    let parsedDefs: any = {};
+    try {
+      parsedDefs = typeof tpl.field_definitions === 'string' ? JSON.parse(tpl.field_definitions) : tpl.field_definitions || {};
+    } catch (e) {}
+
+    const rawFields = Array.isArray(parsedDefs?.fields) ? parsedDefs.fields : Array.isArray(parsedDefs) ? parsedDefs : [];
+
+    // If template has explicit recipient roles defined
     if (parsedRoles.length > 0) {
       setTemplateSigners(
         parsedRoles.map((roleObj: any, i: number) => ({
+          id: roleObj.id || `slot-${i}`,
+          templateSlotIndex: i,
           name: '',
           email: '',
           phone: '',
-          role: roleObj.role || 'signer',
-          authMethod: roleObj.authMethod || 'none',
+          role: (roleObj.role as any) || 'signer',
+          label: roleObj.label || (i === 0 ? 'Client Signatory' : `Signatory / Approver #${i + 1}`),
+          authMethod: roleObj.authMethod || roleObj.auth_method || 'none',
         }))
       );
     } else {
-      setTemplateSigners([
-        {
+      // Analyze fields to detect unique recipient slots
+      const slotSet = new Set<number>();
+      rawFields.forEach((f: any) => {
+        if (f.recipientIndex !== undefined && f.recipientIndex !== null && f.recipientIndex >= 0) {
+          slotSet.add(f.recipientIndex);
+        } else if (typeof f.recipient_id === 'string' && f.recipient_id !== 'null') {
+          const match = f.recipient_id.match(/\d+/);
+          if (match) slotSet.add(Math.max(0, parseInt(match[0], 10) - 1));
+          else slotSet.add(0);
+        } else if (f.type === 'signature' || f.type === 'initials') {
+          slotSet.add(0);
+        }
+      });
+
+      const slots = Array.from(slotSet).sort((a, b) => a - b);
+      const totalCount = Math.max(1, slots.length);
+
+      const generated: any[] = [];
+      for (let i = 0; i < totalCount; i++) {
+        const slotIdx = slots[i] !== undefined ? slots[i] : i;
+        generated.push({
+          id: `slot-${slotIdx}`,
+          templateSlotIndex: slotIdx,
           name: '',
           email: '',
           phone: '',
-          role: 'signer',
+          role: (i === 0 ? 'signer' : 'approver') as 'signer' | 'approver',
+          label: i === 0 ? 'Client Signatory' : `Signatory / Approver #${i + 1}`,
           authMethod: 'none',
-        },
-      ]);
+        });
+      }
+      setTemplateSigners(generated);
     }
+  };
+
+  const handleMoveSigner = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === templateSigners.length - 1) return;
+    const target = direction === 'up' ? index - 1 : index + 1;
+    const updated = [...templateSigners];
+    const item = updated[index];
+    updated[index] = updated[target];
+    updated[target] = item;
+    setTemplateSigners(updated);
   };
 
   const handleDispatchTemplateEmail = async () => {
@@ -187,7 +243,7 @@ export default function DocumentsListPage() {
 
     const invalidSigner = templateSigners.find((s) => !s.email || !s.email.includes('@'));
     if (invalidSigner) {
-      alert('Please enter a valid email address for each client signatory.');
+      alert('Please enter a valid email address for each signatory / approver.');
       return;
     }
 
@@ -202,6 +258,57 @@ export default function DocumentsListPage() {
       const rawFields = Array.isArray(defs?.fields) ? defs.fields : Array.isArray(defs) ? defs : [];
       const base64Content = selectedTemplate.pdf_base64 || defs?.fileBase64 || defs?.pdfBase64 || '';
 
+      // Prepare dispatched recipients list in the user's reordered sequence (Order 0, Order 1...)
+      const dispatchedRecipients = templateSigners.map((s, i) => ({
+        name: s.name.trim() || s.email.trim(),
+        email: s.email.trim().toLowerCase(),
+        phone: s.phone ? s.phone.trim() : '',
+        role: s.role || 'signer',
+        authMethod: s.authMethod || 'none',
+        orderIndex: i, // Dispatched sequence (Order 0 is emailed first)
+      }));
+
+      // Map template fields to the exact recipient position according to templateSlotIndex
+      const mappedFields = rawFields.map((f: any) => {
+        let slotIdx: number | null = null;
+        if (f.recipientIndex !== undefined && f.recipientIndex !== null) {
+          slotIdx = f.recipientIndex;
+        } else if (typeof f.recipient_id === 'string' && f.recipient_id !== 'null') {
+          const match = f.recipient_id.match(/\d+/);
+          if (match) slotIdx = parseInt(match[0], 10) - 1;
+          else slotIdx = 0;
+        } else if (f.recipient_id === null) {
+          slotIdx = null; // Sender pre-fill
+        } else if (f.type === 'signature' || f.type === 'initials') {
+          slotIdx = 0;
+        }
+
+        let finalRecipientIndex: number | null = null;
+        if (slotIdx !== null) {
+          // Find which person in the user's reordered list owns this template slot
+          const foundIdx = templateSigners.findIndex((s) => s.templateSlotIndex === slotIdx);
+          if (foundIdx >= 0) {
+            finalRecipientIndex = foundIdx;
+          } else {
+            finalRecipientIndex = Math.min(slotIdx, templateSigners.length - 1);
+          }
+        }
+
+        return {
+          type: f.type,
+          page: Number(f.page) || 1,
+          x_pct: Number(f.x_pct),
+          y_pct: Number(f.y_pct),
+          width_pct: Number(f.width_pct),
+          height_pct: Number(f.height_pct),
+          required: f.required !== false,
+          label: f.label || f.type,
+          placeholder: f.placeholder || '',
+          value: f.value || f.default_value || undefined,
+          recipientIndex: finalRecipientIndex,
+        };
+      });
+
       const payload = {
         title: templateDocTitle.trim(),
         message: templateDocMessage.trim(),
@@ -209,35 +316,9 @@ export default function DocumentsListPage() {
         mimeType: 'application/pdf',
         fileBase64: base64Content,
         signingOrderEnforced: templateSigningOrder,
-        recipients: templateSigners.map((s, i) => ({
-          name: s.name.trim() || s.email.trim(),
-          email: s.email.trim().toLowerCase(),
-          phone: s.phone ? s.phone.trim() : '',
-          role: s.role || 'signer',
-          authMethod: s.authMethod || 'none',
-          orderIndex: i,
-        })),
-        fields: rawFields.map((f: any) => {
-          let rIndex: number | null = 0;
-          if (f.recipientIndex !== undefined && f.recipientIndex !== null) {
-            rIndex = f.recipientIndex;
-          } else if (f.recipient_id === null) {
-            rIndex = null;
-          }
-          return {
-            type: f.type,
-            page: Number(f.page) || 1,
-            x_pct: Number(f.x_pct),
-            y_pct: Number(f.y_pct),
-            width_pct: Number(f.width_pct),
-            height_pct: Number(f.height_pct),
-            required: f.required !== false,
-            label: f.label || f.type,
-            placeholder: f.placeholder || '',
-            value: f.value || f.default_value || undefined,
-            recipientIndex: rIndex,
-          };
-        }),
+        autoSaveTemplate: false, // Strict: Never create redundant templates on send
+        recipients: dispatchedRecipients,
+        fields: mappedFields,
       };
 
       const res = await fetch('/api/documents', {
@@ -839,10 +920,19 @@ export default function DocumentsListPage() {
                   </div>
                 </div>
 
-                {/* 3. Signatories Input with Address Book Pick */}
+                {/* 3. Signatories & Approvers with Reordering & Role Selection */}
                 <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold text-slate-300">3. Client Signatories (Email & Details)</Label>
+                    <div>
+                      <Label className="text-xs font-semibold text-slate-300">
+                        3. Signatories & Approvers ({templateSigners.length} Configured)
+                      </Label>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {templateSigningOrder
+                          ? 'Sequential order: Signatory #1 signs first. Once signed, Signatory #2 receives invitation.'
+                          : 'Parallel order: All signatories receive invitation links simultaneously.'}
+                      </p>
+                    </div>
                     <Button
                       type="button"
                       variant="ghost"
@@ -850,59 +940,152 @@ export default function DocumentsListPage() {
                       onClick={() => {
                         setTemplateSigners([
                           ...templateSigners,
-                          { name: '', email: '', phone: '', role: 'signer', authMethod: 'none' },
+                          {
+                            id: `slot-${Date.now()}`,
+                            templateSlotIndex: templateSigners.length,
+                            name: '',
+                            email: '',
+                            phone: '',
+                            role: 'signer',
+                            label: `Signatory #${templateSigners.length + 1}`,
+                            authMethod: 'none',
+                          },
                         ]);
                       }}
                       className="h-6 px-2 text-[11px] text-indigo-400 hover:text-indigo-200"
                     >
-                      <Plus className="w-3 h-3 mr-1" /> Add Another Signer
+                      <Plus className="w-3 h-3 mr-1" /> Add Extra Signer
                     </Button>
                   </div>
 
-                  <div className="space-y-2.5">
-                    {templateSigners.map((signer, idx) => (
-                      <div key={idx} className="p-2.5 bg-slate-900 rounded-lg border border-slate-800 space-y-2">
-                        <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold">
-                          <span>Signatory #{idx + 1} ({signer.role.toUpperCase()})</span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setActiveSignerPickIndex(idx);
-                              setIsAddressBookOpen(true);
-                            }}
-                            className="h-5 px-1.5 text-[10px] text-indigo-400 hover:text-indigo-200"
-                          >
-                            <BookOpen className="w-3 h-3 mr-1" /> Address Book
-                          </Button>
-                        </div>
+                  <div className="space-y-3">
+                    {templateSigners.map((signer, idx) => {
+                      const isFirst = idx === 0;
+                      const isLast = idx === templateSigners.length - 1;
+                      const roleBadgeColor =
+                        signer.role === 'approver'
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                          : signer.role === 'viewer'
+                          ? 'bg-slate-500/20 text-slate-300 border-slate-500/40'
+                          : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <Input
-                            placeholder="Full Name (e.g. John Doe)"
-                            value={signer.name}
-                            onChange={(e) => {
-                              const updated = [...templateSigners];
-                              updated[idx].name = e.target.value;
-                              setTemplateSigners(updated);
-                            }}
-                            className="bg-slate-950 border-slate-700 text-xs"
-                          />
-                          <Input
-                            type="email"
-                            placeholder="Email Address (e.g. client@company.com)"
-                            value={signer.email}
-                            onChange={(e) => {
-                              const updated = [...templateSigners];
-                              updated[idx].email = e.target.value;
-                              setTemplateSigners(updated);
-                            }}
-                            className="bg-slate-950 border-slate-700 text-xs"
-                          />
+                      return (
+                        <div
+                          key={signer.id || idx}
+                          className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2.5 transition-all shadow-sm"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-white font-bold text-xs flex items-center justify-center">
+                                {idx + 1}
+                              </span>
+                              <span className="text-xs font-bold text-slate-200">
+                                {templateSigningOrder
+                                  ? `Step ${idx + 1}: ${idx === 0 ? 'Signs 1st' : `Signs #${idx + 1}`}`
+                                  : `Signatory #${idx + 1}`}
+                              </span>
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${roleBadgeColor}`}>
+                                {signer.role.toUpperCase()}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              {/* Reorder Buttons: Move Up / Down */}
+                              <div className="flex items-center bg-slate-950 rounded-lg border border-slate-800 p-0.5">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isFirst}
+                                  onClick={() => handleMoveSigner(idx, 'up')}
+                                  className="h-6 w-6 p-0 text-slate-400 hover:text-white disabled:opacity-30"
+                                  title="Move Earlier in Signing Order"
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isLast}
+                                  onClick={() => handleMoveSigner(idx, 'down')}
+                                  className="h-6 w-6 p-0 text-slate-400 hover:text-white disabled:opacity-30"
+                                  title="Move Later in Signing Order"
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setActiveSignerPickIndex(idx);
+                                  setIsAddressBookOpen(true);
+                                }}
+                                className="h-6 px-2 text-[10px] text-cyan-400 hover:text-cyan-200 border border-cyan-500/20 bg-cyan-950/20"
+                              >
+                                <BookOpen className="w-3 h-3 mr-1" /> Address Book
+                              </Button>
+
+                              {templateSigners.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setTemplateSigners(templateSigners.filter((_, sIdx) => sIdx !== idx));
+                                  }}
+                                  className="h-6 w-6 p-0 text-slate-500 hover:text-red-400"
+                                  title="Remove Signatory Slot"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <Input
+                              placeholder="Full Name (e.g. John Doe)"
+                              value={signer.name}
+                              onChange={(e) => {
+                                const updated = [...templateSigners];
+                                updated[idx].name = e.target.value;
+                                setTemplateSigners(updated);
+                              }}
+                              className="bg-slate-950 border-slate-700 text-xs text-white"
+                            />
+                            <Input
+                              type="email"
+                              placeholder="Email (e.g. client@company.com)"
+                              value={signer.email}
+                              onChange={(e) => {
+                                const updated = [...templateSigners];
+                                updated[idx].email = e.target.value;
+                                setTemplateSigners(updated);
+                              }}
+                              className="bg-slate-950 border-slate-700 text-xs text-white"
+                            />
+                            <select
+                              value={signer.role}
+                              onChange={(e) => {
+                                const updated = [...templateSigners];
+                                updated[idx].role = e.target.value as any;
+                                setTemplateSigners(updated);
+                              }}
+                              className="h-9 px-2 rounded-md border border-slate-700 bg-slate-950 text-slate-200 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                            >
+                              <option value="signer">Signer (Signs Document)</option>
+                              <option value="approver">Approver (Review & Approve)</option>
+                              <option value="filler">Filler (Form Data Only)</option>
+                              <option value="viewer">Viewer (CC Copy)</option>
+                            </select>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </>

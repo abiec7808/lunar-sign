@@ -220,7 +220,7 @@ export default function SignerPortalPage() {
         const signatures = Object.entries(fieldValues)
           .filter(([fieldId, val]) => {
             const field = fields.find((f) => f.id === fieldId);
-            return field?.type === 'signature' || field?.type === 'initials';
+            return (field?.type === 'signature' || field?.type === 'initials') && field.recipient_id === recipient.id && !!val;
           })
           .map(([fieldId, signatureData]) => ({
             fieldId,
@@ -228,13 +228,21 @@ export default function SignerPortalPage() {
             signatureData,
           }));
 
+        // Filter field values to only those belonging to this recipient
+        const myFieldValues: Record<string, string> = {};
+        fields.forEach((f) => {
+          if (f.recipient_id === recipient.id && fieldValues[f.id] !== undefined) {
+            myFieldValues[f.id] = fieldValues[f.id];
+          }
+        });
+
         const res = await fetch(`/api/sign/${token}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             consentGiven: true,
             accessCode: accessCodeInput || undefined,
-            fieldValues,
+            fieldValues: myFieldValues,
             signatures,
           }),
         });

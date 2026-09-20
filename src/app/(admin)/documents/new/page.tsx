@@ -22,6 +22,8 @@ import {
   UserPlus,
   ArrowRight,
   ArrowLeft,
+  ArrowUp,
+  ArrowDown,
   Check,
   FileCheck,
   Send,
@@ -394,6 +396,18 @@ function NewDocumentContent() {
 
   const handleUpdateRecipient = (id: string, updates: Partial<Recipient>) => {
     setRecipients(recipients.map((r) => (r.id === id ? { ...r, ...updates } : r)));
+  };
+
+  const handleMoveRecipient = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === recipients.length - 1) return;
+    const target = direction === 'up' ? index - 1 : index + 1;
+    const updated = [...recipients];
+    const item = updated[index];
+    updated[index] = updated[target];
+    updated[target] = item;
+    const reindexed = updated.map((r, i) => ({ ...r, order_index: i }));
+    setRecipients(reindexed);
   };
 
   const handleRemoveRecipient = (id: string) => {
@@ -1042,15 +1056,43 @@ function NewDocumentContent() {
                         </select>
                       </div>
 
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveRecipient(recip.id)}
-                        className="text-slate-400 hover:text-red-400 shrink-0"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex items-center bg-slate-900 rounded-lg border border-slate-800 p-0.5">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={index === 0}
+                            onClick={() => handleMoveRecipient(index, 'up')}
+                            className="h-7 w-7 p-0 text-slate-400 hover:text-white disabled:opacity-20"
+                            title="Move Earlier in Signing Order"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={index === recipients.length - 1}
+                            onClick={() => handleMoveRecipient(index, 'down')}
+                            className="h-7 w-7 p-0 text-slate-400 hover:text-white disabled:opacity-20"
+                            title="Move Later in Signing Order"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveRecipient(recip.id)}
+                          className="text-slate-400 hover:text-red-400 h-8 w-8 p-0"
+                          title="Remove Recipient"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}

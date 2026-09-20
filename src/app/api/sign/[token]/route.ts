@@ -185,36 +185,44 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       [nowIso, ip, userAgent, recipient.id]
     );
 
-    // 3. Save field values into PostgreSQL fields table
+    // 3. Save field values into PostgreSQL fields table (ONLY for fields belonging to this recipient or unassigned fields)
     for (const [fieldId, val] of Object.entries(validated.fieldValues)) {
       await dbQuery(
-        `UPDATE fields SET value = $1, completed_at = NOW() WHERE id::text = $2 AND document_id = $3`,
-        [val, fieldId, recipient.doc_id]
+        `UPDATE fields SET value = $1, completed_at = NOW()
+         WHERE id::text = $2 AND document_id = $3 AND (recipient_id = $4 OR recipient_id IS NULL)`,
+        [val, fieldId, recipient.doc_id, recipient.id]
       );
     }
 
-    // 4. Save signatures
+    // 4. Save signatures (STRICTLY for fields assigned to this recipient)
     for (const sig of validated.signatures) {
-      await dbQuery(
-        `INSERT INTO signatures (
-          field_id, recipient_id, method, signature_data,
-          font_family, ip_address, user_agent
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (field_id) DO UPDATE SET
-          signature_data = EXCLUDED.signature_data,
-          font_family = EXCLUDED.font_family,
-          ip_address = EXCLUDED.ip_address,
-          user_agent = EXCLUDED.user_agent`,
-        [
-          sig.fieldId,
-          recipient.id,
-          sig.method,
-          sig.signatureData,
-          sig.fontFamily || null,
-          ip,
-          userAgent,
-        ]
+      const fieldCheck = await dbQuery(
+        `SELECT id FROM fields WHERE id::text = $1 AND document_id = $2 AND (recipient_id = $3 OR recipient_id IS NULL) LIMIT 1`,
+        [sig.fieldId, recipient.doc_id, recipient.id]
       );
+
+      if (fieldCheck.rows.length > 0) {
+        await dbQuery(
+          `INSERT INTO signatures (
+            field_id, recipient_id, method, signature_data,
+            font_family, ip_address, user_agent
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT (field_id) DO UPDATE SET
+            signature_data = EXCLUDED.signature_data,
+            font_family = EXCLUDED.font_family,
+            ip_address = EXCLUDED.ip_address,
+            user_agent = EXCLUDED.user_agent`,
+          [
+            sig.fieldId,
+            recipient.id,
+            sig.method,
+            sig.signatureData,
+            sig.fontFamily || null,
+            ip,
+            userAgent,
+          ]
+        );
+      }
     }
 
     // 5. Log Audit Event
