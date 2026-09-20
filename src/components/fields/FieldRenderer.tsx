@@ -25,6 +25,7 @@ import {
 interface FieldRendererProps {
   field: DocumentField;
   recipient?: Recipient | null;
+  currentRecipient?: Recipient | null;
   mode: 'editor' | 'signer' | 'readonly';
   isSelected?: boolean;
   value?: string;
@@ -37,6 +38,7 @@ interface FieldRendererProps {
 export function FieldRenderer({
   field,
   recipient,
+  currentRecipient,
   mode,
   isSelected = false,
   value = field.value || '',
@@ -150,20 +152,63 @@ export function FieldRenderer({
     );
   }
 
-  // 2. In Signer Mode: Check if field is assigned to another recipient or is interactive
-  const isAssignedToOther = isSignerMode && field.recipient_id && recipient?.id && field.recipient_id !== recipient.id;
+  // 2. In Signer Mode: Check whether this field belongs to the currently active signer / approver
+  const isMyField = isSignerMode && !!currentRecipient?.id && field.recipient_id === currentRecipient.id;
 
-  if (isSignerMode && isAssignedToOther && field.type !== 'signature' && field.type !== 'initials') {
-    if (field.type === 'checkbox') {
-      const isChecked = value === 'true' || value === '1';
+  // If this field is a Sender Pre-fill (recipient_id is null) OR assigned to someone else:
+  // It is READ-ONLY and CANNOT be changed or clicked by the current user.
+  if (isSignerMode && !isMyField) {
+    if (field.type === 'signature' || field.type === 'initials') {
+      // If someone has already signed it, display the signature image or text
+      if (signatureData || value) {
+        return (
+          <div className="w-full h-full flex items-center justify-center p-0.5 select-none pointer-events-none">
+            {signatureData?.startsWith('data:image') || value?.startsWith('data:image') ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={signatureData || value}
+                alt="Signature"
+                className="max-h-full max-w-full object-contain filter drop-shadow"
+              />
+            ) : (
+              <span className="font-dancing-script text-lg text-slate-900 select-none" style={{ fontSize: effectiveFontSize }}>
+                {signatureData || value}
+              </span>
+            )}
+          </div>
+        );
+      }
+
+      // If not signed yet, show non-clickable placeholder indicating who it is reserved for
+      const reservedName = recipient?.name
+        ? recipient.name.split(' ')[0]
+        : recipient
+        ? `Signer ${(recipient.order_index ?? 0) + 1}`
+        : 'Signatory';
+
       return (
-        <div className="w-full h-full rounded border border-slate-300 bg-slate-50 flex items-center justify-center pointer-events-none">
+        <div
+          className="w-full h-full rounded border border-dashed border-slate-400 bg-slate-100/50 flex items-center justify-center px-1 py-0.5 select-none pointer-events-none"
+          title={`Reserved for ${recipient?.name || reservedName}`}
+        >
+          <span className="truncate text-slate-600 text-[10px] font-semibold flex items-center gap-1">
+            <PenTool className="w-3 h-3 text-slate-400 shrink-0" />
+            <span>{field.label || (field.type === 'initials' ? 'Initials' : 'Signature')} ({reservedName})</span>
+          </span>
+        </div>
+      );
+    }
+
+    if (field.type === 'checkbox') {
+      const isChecked = value === 'true' || value === '1' || field.value === 'true';
+      return (
+        <div className="w-full h-full rounded border border-slate-400 bg-white flex items-center justify-center pointer-events-none shadow-sm">
           {isChecked && <span className="font-bold text-black" style={{ fontSize: effectiveFontSize }}>✓</span>}
         </div>
       );
     }
 
-    // Standard text / currency / date / SA ID / SA VAT / dropdown - rendered cleanly on document
+    // Standard Sender Pre-Filled Text, Currency, Dates, IDs - Permanently Locked
     return (
       <div
         style={{ ...arialFontStyle, fontSize: effectiveFontSize, color: '#000000' }}
@@ -174,7 +219,7 @@ export function FieldRenderer({
     );
   }
 
-  // 3. In Signer Mode: Interactive inputs for THIS active recipient / approver
+  // 3. In Signer Mode: Interactive inputs exclusively for THIS active recipient / approver
   switch (field.type) {
     case 'signature':
     case 'initials':
@@ -184,9 +229,10 @@ export function FieldRenderer({
           className={cn(
             'w-full h-full rounded border-2 border-dashed flex items-center justify-center cursor-pointer transition-all px-2 py-0.5 select-none',
             value || signatureData
-              ? 'border-indigo-400 bg-indigo-950/40 text-white shadow-sm'
+              ? 'border-indigo-400 bg-indigo-950/40 text-white shadow-sm hover:border-indigo-300'
               : 'border-indigo-500 bg-indigo-900/30 hover:bg-indigo-900/50 text-indigo-200 animate-pulse'
           )}
+          title="Click to adopt and place your signature"
         >
           {signatureData || value ? (
             signatureData?.startsWith('data:image') || value?.startsWith('data:image') ? (
@@ -309,13 +355,23 @@ export function FieldRenderer({
       );
 
     default:
+      if (field.read_only) {
+        return (
+          <div
+            style={{ ...arialFontStyle, fontSize: effectiveFontSize, color: '#000000' }}
+            className="w-full h-full flex items-center px-1 font-semibold overflow-hidden text-black select-none pointer-events-none"
+          >
+            <span className="truncate">{value || field.value || ''}</span>
+          </div>
+        );
+      }
+
       return (
         <input
           type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
           placeholder={field.placeholder || field.label || ''}
           value={value}
           onChange={(e) => onChange?.(e.target.value)}
-          readOnly={field.read_only}
           style={{ ...arialFontStyle, fontSize: effectiveFontSize, color: '#000000', backgroundColor: '#ffffff' }}
           className="w-full h-full px-1.5 py-0 rounded border border-slate-400 bg-white text-black font-semibold focus:ring-1 focus:ring-indigo-600 outline-none leading-none shadow-sm placeholder:text-slate-400"
         />

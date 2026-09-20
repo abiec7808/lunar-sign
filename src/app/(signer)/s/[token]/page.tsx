@@ -77,6 +77,7 @@ export default function SignerPortalPage() {
     created_at: new Date().toISOString(),
   });
 
+  const [allRecipients, setAllRecipients] = useState<Recipient[]>([]);
   const [fields, setFields] = useState<DocumentField[]>([]);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [activePage, setActivePage] = useState(1);
@@ -147,6 +148,9 @@ export default function SignerPortalPage() {
           if (data.recipient) {
             setRecipient(data.recipient);
           }
+          if (data.recipients && Array.isArray(data.recipients)) {
+            setAllRecipients(data.recipients);
+          }
           if (data.isWaitingForPreviousSigner) {
             setIsWaitingForPreviousSigner(true);
             setPreviousSignerName(data.previousSignerName || 'Previous Signer');
@@ -158,6 +162,13 @@ export default function SignerPortalPage() {
             data.fields.forEach((f: any) => {
               if (f.value) initialVals[f.id] = f.value;
             });
+            if (data.signatures && Array.isArray(data.signatures)) {
+              data.signatures.forEach((s: any) => {
+                if (s.field_id && s.signature_data) {
+                  initialVals[s.field_id] = s.signature_data;
+                }
+              });
+            }
             setFieldValues((prev) => ({ ...prev, ...initialVals }));
           }
         }
@@ -168,11 +179,8 @@ export default function SignerPortalPage() {
     loadSignSession();
   }, [token]);
 
-  // Field Navigation Calculations - Include assigned fields or signature placeholders
-  const matchingFields = fields.filter((f) => f.recipient_id === recipient.id);
-  const recipientFields = matchingFields.length > 0
-    ? matchingFields
-    : fields.filter((f) => !f.recipient_id || f.recipient_id === recipient.id || f.type === 'signature' || f.type === 'initials');
+  // Field Navigation Calculations - ONLY include fields strictly assigned to THIS recipient
+  const recipientFields = fields.filter((f) => f.recipient_id === recipient.id && !f.read_only);
 
   const completedFieldsCount = recipientFields.filter(
     (f) => fieldValues[f.id] && fieldValues[f.id].trim() !== ''
@@ -490,7 +498,8 @@ export default function SignerPortalPage() {
         <InteractivePdfCanvas
           pageNumber={activePage}
           fields={fields}
-          recipients={[recipient]}
+          recipients={allRecipients.length > 0 ? allRecipients : [recipient]}
+          currentRecipient={recipient}
           selectedFieldId={null}
           onSelectField={() => {}}
           onUpdateFieldPosition={() => {}}

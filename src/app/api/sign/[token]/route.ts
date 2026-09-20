@@ -66,10 +66,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     }
 
     // Fetch document fields from Postgres fields table
-    const fieldsRes = await dbQuery(
-      `SELECT * FROM fields WHERE document_id = $1 ORDER BY page ASC, y_pct ASC`,
-      [r.doc_id]
-    );
+    const [fieldsRes, allRecipsRes, sigsRes] = await Promise.all([
+      dbQuery(`SELECT * FROM fields WHERE document_id = $1 ORDER BY page ASC, y_pct ASC`, [r.doc_id]),
+      dbQuery(`SELECT id, name, email, role, order_index, status FROM recipients WHERE document_id = $1 ORDER BY order_index ASC`, [r.doc_id]),
+      dbQuery(`SELECT s.* FROM signatures s JOIN fields f ON s.field_id = f.id WHERE f.document_id = $1`, [r.doc_id]),
+    ]);
 
     return NextResponse.json({
       recipient: {
@@ -82,6 +83,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         authMethod: r.auth_method,
         consentGivenAt: r.consent_given_at,
       },
+      recipients: allRecipsRes.rows,
+      signatures: sigsRes.rows,
       document: {
         id: r.doc_id,
         title: r.doc_title,

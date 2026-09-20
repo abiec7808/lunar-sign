@@ -18,6 +18,7 @@ interface InteractivePdfCanvasProps {
   onConfigureField: (field: DocumentField) => void;
   pdfPageDataUrl?: string;
   isSignerMode?: boolean;
+  currentRecipient?: Recipient | null;
   fieldValues?: Record<string, string>;
   onFieldValueChange?: (fieldId: string, val: string) => void;
   onOpenSignatureModal?: (fieldId: string) => void;
@@ -27,6 +28,7 @@ export function InteractivePdfCanvas({
   pageNumber,
   fields,
   recipients,
+  currentRecipient,
   selectedFieldId,
   onSelectField,
   onUpdateFieldPosition,
@@ -193,6 +195,7 @@ export function InteractivePdfCanvas({
             <FieldRenderer
               field={field}
               recipient={recipient}
+              currentRecipient={currentRecipient}
               mode={isSignerMode ? 'signer' : 'editor'}
               isSelected={isSelected}
               value={fieldValues[field.id] || field.value || ''}
