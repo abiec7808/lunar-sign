@@ -150,30 +150,10 @@ export function FieldRenderer({
     );
   }
 
-  // 2. In Signer Mode: Check if field is assigned to someone else or is a Sender prefilled field
-  if (isSignerMode && field.recipient_id !== recipient?.id) {
-    if (field.type === 'signature' || field.type === 'initials') {
-      if (signatureData || value) {
-        return (
-          <div className="w-full h-full flex items-center justify-center pointer-events-none">
-            {signatureData?.startsWith('data:image') || value?.startsWith('data:image') ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={signatureData || value} alt="Signature" className="max-h-full max-w-full object-contain" />
-            ) : (
-              <span className="font-dancing-script text-lg text-slate-800" style={{ fontSize: effectiveFontSize }}>
-                {signatureData || value}
-              </span>
-            )}
-          </div>
-        );
-      }
-      return (
-        <div className="w-full h-full rounded border border-dashed border-slate-300 bg-slate-100/60 flex items-center justify-center text-[10px] text-slate-400 font-sans pointer-events-none">
-          {field.label || 'Signer Placeholder'}
-        </div>
-      );
-    }
+  // 2. In Signer Mode: Check if field is assigned to another recipient or is interactive
+  const isAssignedToOther = isSignerMode && field.recipient_id && recipient?.id && field.recipient_id !== recipient.id;
 
+  if (isSignerMode && isAssignedToOther && field.type !== 'signature' && field.type !== 'initials') {
     if (field.type === 'checkbox') {
       const isChecked = value === 'true' || value === '1';
       return (
@@ -194,7 +174,7 @@ export function FieldRenderer({
     );
   }
 
-  // 3. In Signer Mode: Interactive inputs for THIS active recipient
+  // 3. In Signer Mode: Interactive inputs for THIS active recipient / approver
   switch (field.type) {
     case 'signature':
     case 'initials':
@@ -202,9 +182,9 @@ export function FieldRenderer({
         <div
           onClick={() => onOpenSignatureModal?.(field.id)}
           className={cn(
-            'w-full h-full rounded border-2 border-dashed flex items-center justify-center cursor-pointer transition-all px-2 py-0.5',
+            'w-full h-full rounded border-2 border-dashed flex items-center justify-center cursor-pointer transition-all px-2 py-0.5 select-none',
             value || signatureData
-              ? 'border-indigo-400 bg-indigo-950/40 text-white'
+              ? 'border-indigo-400 bg-indigo-950/40 text-white shadow-sm'
               : 'border-indigo-500 bg-indigo-900/30 hover:bg-indigo-900/50 text-indigo-200 animate-pulse'
           )}
         >
@@ -222,7 +202,7 @@ export function FieldRenderer({
               </span>
             )
           ) : (
-            <div className="flex items-center gap-1 font-semibold" style={arialFontStyle}>
+            <div className="flex items-center gap-1 font-semibold text-indigo-200 text-xs">
               <PenTool className="w-3.5 h-3.5 shrink-0" />
               <span>Click to {field.type === 'initials' ? 'Initial' : 'Sign'}</span>
             </div>

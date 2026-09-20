@@ -23,6 +23,8 @@ import {
   XCircle,
   HelpCircle,
   ExternalLink,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -112,12 +114,14 @@ export default function SignerPortalPage() {
                 }
                 const pages = await renderPdfPagesFromBuffer(bytes.buffer);
                 setRenderedPages(pages);
+                setDocument((prev) => ({ ...prev, page_count: Math.max(prev.page_count, pages.length) }));
               } catch (renderErr) {
                 console.warn('Failed to render PDF buffer with pdf.js, loading fallback:', renderErr);
                 try {
                   const defaultSample = await createDefaultSamplePdf();
                   const pages = await renderPdfPagesFromBuffer(defaultSample.buffer);
                   setRenderedPages(pages);
+                  setDocument((prev) => ({ ...prev, page_count: Math.max(prev.page_count, pages.length) }));
                 } catch (e) {}
               }
             } else {
@@ -125,6 +129,7 @@ export default function SignerPortalPage() {
                 const defaultSample = await createDefaultSamplePdf();
                 const pages = await renderPdfPagesFromBuffer(defaultSample.buffer);
                 setRenderedPages(pages);
+                setDocument((prev) => ({ ...prev, page_count: Math.max(prev.page_count, pages.length) }));
               } catch (e) {
                 console.warn('Failed to generate sample PDF pages:', e);
               }
@@ -154,11 +159,21 @@ export default function SignerPortalPage() {
     loadSignSession();
   }, [token]);
 
-  // Field Navigation Calculations - Only this signer's own placeholders
-  const recipientFields = fields.filter((f) => f.recipient_id === recipient.id);
+  // Field Navigation Calculations - Include assigned fields or signature placeholders
+  const matchingFields = fields.filter((f) => f.recipient_id === recipient.id);
+  const recipientFields = matchingFields.length > 0
+    ? matchingFields
+    : fields.filter((f) => !f.recipient_id || f.recipient_id === recipient.id || f.type === 'signature' || f.type === 'initials');
+
   const completedFieldsCount = recipientFields.filter(
     (f) => fieldValues[f.id] && fieldValues[f.id].trim() !== ''
   ).length;
+
+  const totalPages = Math.max(
+    document.page_count || 1,
+    renderedPages.length || 1,
+    ...fields.map((f) => Number(f.page) || 1)
+  );
 
   const handleFieldValueChange = (fieldId: string, val: string) => {
     setFieldValues((prev) => ({ ...prev, [fieldId]: val }));
@@ -232,7 +247,8 @@ export default function SignerPortalPage() {
     if (currentFieldIndex < recipientFields.length - 1) {
       const nextIndex = currentFieldIndex + 1;
       setCurrentFieldIndex(nextIndex);
-      setActivePage(recipientFields[nextIndex].page);
+      const targetPage = Number(recipientFields[nextIndex]?.page) || 1;
+      setActivePage(targetPage);
     }
   };
 
@@ -240,7 +256,8 @@ export default function SignerPortalPage() {
     if (currentFieldIndex > 0) {
       const prevIndex = currentFieldIndex - 1;
       setCurrentFieldIndex(prevIndex);
-      setActivePage(recipientFields[prevIndex].page);
+      const targetPage = Number(recipientFields[prevIndex]?.page) || 1;
+      setActivePage(targetPage);
     }
   };
 
@@ -398,30 +415,58 @@ export default function SignerPortalPage() {
       {/* Main Document Body */}
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 flex flex-col items-center">
         {/* Page Switcher */}
-        <div className="w-full max-w-[800px] flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 mb-4">
+        <div className="w-full max-w-[800px] flex flex-wrap items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 mb-4 shadow-md gap-2">
           <div className="flex items-center gap-2 text-xs text-slate-300">
             <span className="font-semibold text-white">{recipient.name}</span>
-            <Badge variant="default" className="text-[10px]">
-              Signer
+            <Badge variant={recipient.role === 'approver' ? 'secondary' : 'default'} className="text-[10px]">
+              {recipient.role === 'approver' ? 'Approver' : 'Signer'}
             </Badge>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-400 mr-1">Page:</span>
-            {[...Array(document.page_count)].map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => setActivePage(i + 1)}
-                className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${
-                  activePage === i + 1
-                    ? 'bg-indigo-600 text-white shadow'
-                    : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                {i + 1}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setActivePage((prev) => Math.max(1, prev - 1))}
+              disabled={activePage <= 1}
+              className="h-7 px-2.5 text-xs border-slate-700 bg-slate-950 text-slate-300 hover:text-white"
+            >
+              <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Prev Page
+            </Button>
+
+            <div className="flex items-center gap-1">
+              {[...Array(totalPages)].map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setActivePage(i + 1)}
+                  className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${
+                    activePage === i + 1
+                      ? 'bg-indigo-600 text-white shadow'
+                      : 'bg-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                  title={`Go to Page ${i + 1}`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setActivePage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={activePage >= totalPages}
+              className="h-7 px-2.5 text-xs border-slate-700 bg-slate-950 text-slate-300 hover:text-white"
+            >
+              Next Page <ChevronRight className="w-3.5 h-3.5 ml-1" />
+            </Button>
+
+            <span className="text-[11px] text-slate-400 font-mono ml-1 hidden sm:inline">
+              Page {activePage} of {totalPages}
+            </span>
           </div>
         </div>
 
