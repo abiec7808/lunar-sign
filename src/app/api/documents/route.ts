@@ -232,7 +232,8 @@ export async function POST(req: NextRequest) {
 
       // Send Email Invitation to first recipient or all if non-sequential
       if (!validated.signingOrderEnforced || i === 0) {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunaposgeorge.co.za';
+        const { getAppUrl } = await import('@/lib/url');
+        const appUrl = getAppUrl(req);
         const signingUrl = `${appUrl}/s/${rawToken}`;
 
         try {

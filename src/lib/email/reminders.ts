@@ -28,7 +28,8 @@ export async function processExpiringDocumentReminders(): Promise<ReminderCheckR
   };
 
   try {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunaposgeorge.co.za';
+    const { getAppUrl } = await import('@/lib/url');
+    const appUrl = getAppUrl();
 
     // 1. Mark expired documents where expires_at <= NOW()
     const expiredRes = await dbQuery(

@@ -250,7 +250,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       const creatorName = docCreatorRes.rows[0]?.creator_name || 'Lunar Administrator';
 
       try {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunaposgeorge.co.za';
+        const { getAppUrl } = await import('@/lib/url');
+        const appUrl = getAppUrl(req);
         await emailService.sendDocumentCompleted({
           to: creatorEmail,
           recipientName: creatorName,
@@ -284,7 +285,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
             `UPDATE recipients SET token_hash = $1 WHERE id = $2`,
             [nextTokenHash, nextRecip.id]
           );
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunaposgeorge.co.za';
+          const { getAppUrl } = await import('@/lib/url');
+          const appUrl = getAppUrl(req);
           const signingUrl = `${appUrl}/s/${nextRawToken}`;
           const { formatSaDate } = await import('@/lib/dates');
 

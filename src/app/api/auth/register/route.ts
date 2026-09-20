@@ -115,7 +115,8 @@ export async function POST(req: NextRequest) {
 
     // 7. Inform Super Admin admin@lunarposgeorge.co.za about the new business registration
     try {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunaposgeorge.co.za';
+      const { getAppUrl } = await import('@/lib/url');
+      const appUrl = getAppUrl(req);
       await emailService.sendNewRegistrationAlert({
         to: 'admin@lunarposgeorge.co.za',
         businessName: validated.businessName,

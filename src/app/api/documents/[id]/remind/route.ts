@@ -34,7 +34,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const doc = docRes.rows[0];
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunaposgeorge.co.za';
+    const { getAppUrl } = await import('@/lib/url');
+    const appUrl = getAppUrl(req);
     const expiresAtFormatted = formatSaDate(doc.expires_at || new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString());
 
     // Fetch target pending recipient(s)
