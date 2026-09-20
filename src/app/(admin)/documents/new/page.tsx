@@ -35,15 +35,19 @@ import {
   Users,
   BookOpen,
   BookmarkPlus,
+  Link2,
+  MessageCircle,
+  CheckCircle2,
 } from 'lucide-react';
 
 function NewDocumentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const templateId = searchParams.get('templateId');
+  const isTemplateEditMode = searchParams.get('mode') === 'edit_template';
 
   // Wizard Steps: 1 = Upload & Meta, 2 = Recipients, 3 = Place Fields, 4 = Pre-Fill & Review
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(templateId ? 2 : 1);
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(templateId ? (isTemplateEditMode ? 3 : 2) : 1);
 
   // Document Metadata State
   const [docTitle, setDocTitle] = useState('Standard Service Level Agreement (SLA)');
@@ -68,6 +72,10 @@ function NewDocumentContent() {
   const [templateDescription, setTemplateDescription] = useState('');
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [templateNotification, setTemplateNotification] = useState<string | null>(null);
+
+  // Dispatch success modal state
+  const [sentSuccessData, setSentSuccessData] = useState<any | null>(null);
+  const [copiedSuccessIndex, setCopiedSuccessIndex] = useState<number | null>(null);
 
   useEffect(() => {
     async function loadAddressBook() {
@@ -146,8 +154,14 @@ function NewDocumentContent() {
           const data = await res.json();
           const tpl = data.template;
           if (tpl) {
-            setDocTitle(tpl.name || 'Contract Agreement');
-            if (tpl.description) setDocMessage(tpl.description);
+            const customTitleFromUrl = searchParams.get('title');
+            const customMsgFromUrl = searchParams.get('message');
+            setDocTitle(customTitleFromUrl || tpl.name || 'Contract Agreement');
+            if (customMsgFromUrl) {
+              setDocMessage(customMsgFromUrl);
+            } else if (tpl.description) {
+              setDocMessage(tpl.description);
+            }
             setTemplateName(tpl.name || '');
 
             let defs: any = tpl.field_definitions;
@@ -434,7 +448,47 @@ function NewDocumentContent() {
     setSelectedField(updated);
   };
 
-  const handleSaveTemplate = async () => {
+  const handleUpdateLoadedTemplate = async () => {
+    if (!templateId) return;
+    try {
+      setIsSavingTemplate(true);
+      const res = await fetch(`/api/templates/${templateId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: templateName.trim() || docTitle.trim(),
+          description: templateDescription.trim() || docMessage.trim(),
+          fields,
+          recipientRoles: recipients.map((r, i) => ({
+            role: r.role || 'signer',
+            label: r.name || `Signer ${i + 1}`,
+            orderIndex: i,
+            authMethod: r.auth_method,
+          })),
+          fileBase64,
+          originalFilename: uploadedFileName,
+        }),
+      });
+
+      if (res.ok) {
+        setTemplateNotification(`Template "${templateName || docTitle}" successfully updated!`);
+        setTimeout(() => setTemplateNotification(null), 5000);
+        if (isTemplateEditMode) {
+          setTimeout(() => router.push('/templates'), 1200);
+        }
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to update template');
+      }
+    } catch (err) {
+      console.error('Error updating template:', err);
+      alert('Failed to update template.');
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
+  const handleSaveTemplate = async (forceNew = false) => {
     if (!templateName.trim()) {
       alert('Please enter a template name.');
       return;
@@ -442,6 +496,36 @@ function NewDocumentContent() {
 
     try {
       setIsSavingTemplate(true);
+
+      if (templateId && !forceNew) {
+        // Update existing template
+        const res = await fetch(`/api/templates/${templateId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: templateName.trim(),
+            description: templateDescription.trim() || `Custom template for ${templateName.trim()}`,
+            fields,
+            recipientRoles: recipients.map((r, i) => ({
+              role: r.role || 'signer',
+              label: `Signer ${i + 1}`,
+              orderIndex: i,
+              authMethod: r.auth_method,
+            })),
+            fileBase64,
+            originalFilename: uploadedFileName,
+          }),
+        });
+
+        if (res.ok) {
+          setIsSaveTemplateModalOpen(false);
+          setTemplateNotification(`Template "${templateName.trim()}" successfully updated!`);
+          setTimeout(() => setTemplateNotification(null), 5000);
+          return;
+        }
+      }
+
+      // Create new template
       const res = await fetch('/api/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -535,13 +619,13 @@ function NewDocumentContent() {
 
       const data = await response.json();
       if (data.documentId) {
-        router.push(`/documents/${data.documentId}`);
+        setSentSuccessData(data);
       } else {
-        router.push('/documents');
+        alert(data.error || 'Failed to dispatch envelope.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error sending envelope:', err);
-      router.push('/documents');
+      alert(err?.message || 'Failed to dispatch document envelope.');
     } finally {
       setIsSending(false);
     }
@@ -553,61 +637,103 @@ function NewDocumentContent() {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#090d16]">
       <AdminHeader
-        title="Prepare Document Envelope"
-        subtitle={`Step ${currentStep} of 4 — ${
-          currentStep === 1
-            ? 'Document Upload & Details'
-            : currentStep === 2
-            ? 'Signers & Roles'
-            : currentStep === 3
-            ? 'Interactive Field Placement'
-            : 'Sender Pre-fill & Final Send'
-        }`}
+        title={isTemplateEditMode ? 'Visual Template Editor' : 'Prepare Document Envelope'}
+        subtitle={
+          isTemplateEditMode
+            ? `Editing signature placements, initials, and fields for template: "${templateName || docTitle}"`
+            : `Step ${currentStep} of 4 — ${
+                currentStep === 1
+                  ? 'Document Upload & Details'
+                  : currentStep === 2
+                  ? 'Signers & Roles'
+                  : currentStep === 3
+                  ? 'Interactive Field Placement'
+                  : 'Sender Pre-fill & Final Send'
+              }`
+        }
         actionButton={
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            {currentStep > 1 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentStep((c) => (c - 1) as 1 | 2 | 3 | 4)}
-                className="text-xs"
-              >
-                <ArrowLeft className="w-3.5 h-3.5 mr-1" /> Back
-              </Button>
-            )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setTemplateName(docTitle);
-                setIsSaveTemplateModalOpen(true);
-              }}
-              className="text-xs border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/40"
-            >
-              <BookmarkPlus className="w-3.5 h-3.5 mr-1" /> Save as Template
-            </Button>
-
-            {currentStep < 4 ? (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => setCurrentStep((c) => (c + 1) as 1 | 2 | 3 | 4)}
-                className="bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold"
-              >
-                Next Step <ArrowRight className="w-3.5 h-3.5 ml-1" />
-              </Button>
+            {isTemplateEditMode ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push('/templates')}
+                  className="text-xs border-slate-700 text-slate-300"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 mr-1" /> Back to Templates
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={isSavingTemplate}
+                  onClick={handleUpdateLoadedTemplate}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-600/25"
+                >
+                  <BookmarkPlus className="w-3.5 h-3.5 mr-1.5" />
+                  {isSavingTemplate ? 'Saving Changes...' : 'Save Template Changes'}
+                </Button>
+              </>
             ) : (
-              <Button
-                variant="default"
-                size="sm"
-                disabled={isSending}
-                onClick={handleSendEnvelope}
-                className="bg-emerald-600 hover:bg-emerald-500 text-xs font-bold shadow-lg shadow-emerald-600/25"
-              >
-                <Send className="w-3.5 h-3.5 mr-1.5" />
-                {isSending ? 'Sending to Live Supabase & SMTP...' : 'Send Live Envelope'}
-              </Button>
+              <>
+                {currentStep > 1 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentStep((c) => (c - 1) as 1 | 2 | 3 | 4)}
+                    className="text-xs"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5 mr-1" /> Back
+                  </Button>
+                )}
+
+                {templateId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isSavingTemplate}
+                    onClick={handleUpdateLoadedTemplate}
+                    className="text-xs border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/40"
+                    title="Update the base template with your current field placements"
+                  >
+                    <BookmarkPlus className="w-3.5 h-3.5 mr-1" /> Update Base Template
+                  </Button>
+                )}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setTemplateName(docTitle);
+                    setIsSaveTemplateModalOpen(true);
+                  }}
+                  className="text-xs border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/40"
+                >
+                  <BookmarkPlus className="w-3.5 h-3.5 mr-1" /> Save as New Template
+                </Button>
+
+                {currentStep < 4 ? (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => setCurrentStep((c) => (c + 1) as 1 | 2 | 3 | 4)}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold"
+                  >
+                    Next Step <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                ) : (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    disabled={isSending}
+                    onClick={handleSendEnvelope}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-xs font-bold shadow-lg shadow-emerald-600/25"
+                  >
+                    <Send className="w-3.5 h-3.5 mr-1.5" />
+                    {isSending ? 'Sending to Live Supabase & Resend...' : 'Send Live Envelope'}
+                  </Button>
+                )}
+              </>
             )}
           </div>
         }
@@ -623,6 +749,29 @@ function NewDocumentContent() {
           </div>
         </div>
       )}
+
+      {/* Persistent Document Title & Reference Bar (Custom naming for templates) */}
+      <div className="max-w-7xl mx-auto px-6 pt-4 pb-1 w-full">
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 shrink-0 flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-indigo-400" /> Document Title:
+            </span>
+            <input
+              type="text"
+              value={docTitle}
+              onChange={(e) => setDocTitle(e.target.value)}
+              placeholder="e.g. SLA - CHS or SLA - SPAR"
+              className="bg-slate-950/90 border border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-xs font-semibold text-white placeholder:text-slate-500 flex-1 max-w-lg shadow-inner"
+            />
+          </div>
+          <div className="text-[11px] text-slate-400 flex items-center gap-2 shrink-0">
+            <span className="font-mono text-slate-500">
+              {renderedPages.length || 2} Pages • {recipients.length} Signer{recipients.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+        </div>
+      </div>
 
       {/* STEP 1: UPLOAD & METADATA */}
       {currentStep === 1 && (
@@ -691,6 +840,46 @@ function NewDocumentContent() {
       {/* STEP 2: RECIPIENTS & SIGNING ORDER */}
       {currentStep === 2 && (
         <div className="max-w-4xl w-full mx-auto p-8 space-y-6">
+          {/* Document & Envelope Title Customization (Enables custom agreement naming before dispatch) */}
+          <Card className="bg-slate-900/70 border-slate-800">
+            <CardHeader className="pb-3 border-b border-slate-800">
+              <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+                <FileText className="w-4 h-4 text-cyan-400" /> Document Title & Envelope Details
+              </CardTitle>
+              <p className="text-xs text-slate-400">
+                Customize the name of this agreement. This title is displayed to your clients, stamped on certificates, and used in email subjects.
+              </p>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs font-semibold text-slate-300">Document / Agreement Name</Label>
+                  <Input
+                    value={docTitle}
+                    onChange={(e) => setDocTitle(e.target.value)}
+                    placeholder="e.g. Master Services Agreement - Surgical Sync (Pty) Ltd"
+                    className="mt-1 bg-slate-950 border-slate-700 text-xs font-semibold text-white placeholder:text-slate-500 shadow-inner"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Email Subject: <span className="text-cyan-400 font-mono">Signature Requested: {docTitle || 'Agreement'}</span>
+                  </span>
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-slate-300">Message to Signers (Optional)</Label>
+                  <Input
+                    value={docMessage}
+                    onChange={(e) => setDocMessage(e.target.value)}
+                    placeholder="e.g. Please review and sign the attached agreement."
+                    className="mt-1 bg-slate-950 border-slate-700 text-xs text-slate-200 placeholder:text-slate-500 shadow-inner"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Included in the email notification body sent to all signers.
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="bg-slate-900/70 border-slate-800">
             <CardHeader className="flex flex-row items-center justify-between pb-4 border-b border-slate-800">
               <div>
@@ -912,10 +1101,46 @@ function NewDocumentContent() {
             <CardHeader>
               <CardTitle className="text-base text-white">4. Sender Pre-Fill & Envelope Review</CardTitle>
               <p className="text-xs text-slate-400">
-                Fill in all prefilled contract sections before dispatching. Values entered here are permanently stamped onto the agreement.
+                Review agreement details and fill in all prefilled contract sections before dispatching. Values entered here are permanently stamped onto the agreement.
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Envelope Custom Document Title & Notification Message */}
+              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-cyan-400" /> Document Title & Notification Details
+                  </div>
+                  <Badge variant="outline" className="text-[10px] text-cyan-400 border-cyan-500/30">
+                    Visible to Customers
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-[11px] font-semibold text-slate-400">Document Title</Label>
+                    <Input
+                      value={docTitle}
+                      onChange={(e) => setDocTitle(e.target.value)}
+                      placeholder="Enter custom document title..."
+                      className="mt-1 bg-slate-900 border-slate-700 text-xs font-semibold text-white"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] font-semibold text-slate-400">Email Invitation Message</Label>
+                    <Input
+                      value={docMessage}
+                      onChange={(e) => setDocMessage(e.target.value)}
+                      placeholder="Custom message to signers..."
+                      className="mt-1 bg-slate-900 border-slate-700 text-xs text-slate-300"
+                    />
+                  </div>
+                </div>
+                <div className="text-[11px] text-slate-400 pt-1 flex items-center gap-1.5">
+                  <span>Signer Email Subject Preview:</span>
+                  <strong className="text-cyan-300 font-mono text-[11px]">Signature Requested: {docTitle || 'Agreement'}</strong>
+                </div>
+              </div>
+
               {/* 1. Sender Designated Pre-Fill Fields */}
               <div className="space-y-3">
                 <div className="text-xs font-bold text-slate-200 flex items-center justify-between border-b border-slate-800 pb-2">
@@ -1093,7 +1318,7 @@ function NewDocumentContent() {
             </div>
           </div>
 
-          <DialogFooter className="flex gap-2">
+          <DialogFooter className="flex flex-wrap gap-2 justify-end">
             <Button
               variant="outline"
               size="sm"
@@ -1102,13 +1327,23 @@ function NewDocumentContent() {
             >
               Cancel
             </Button>
+            {templateId && (
+              <Button
+                size="sm"
+                disabled={isSavingTemplate}
+                onClick={() => handleSaveTemplate(false)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-600/25"
+              >
+                {isSavingTemplate ? 'Saving...' : 'Update Current Template'}
+              </Button>
+            )}
             <Button
               size="sm"
               disabled={isSavingTemplate}
-              onClick={handleSaveTemplate}
+              onClick={() => handleSaveTemplate(true)}
               className="bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25"
             >
-              {isSavingTemplate ? 'Saving...' : 'Save Template'}
+              {isSavingTemplate ? 'Saving...' : templateId ? 'Save as New Template Copy' : 'Save Template'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1123,6 +1358,116 @@ function NewDocumentContent() {
         onUpdateField={handleSaveFieldConfig}
         onDeleteField={handleDeleteField}
       />
+
+      {/* Envelope Dispatched Success Modal & Direct Signing Links */}
+      <Dialog open={!!sentSuccessData} onOpenChange={(open) => { if (!open && sentSuccessData?.documentId) router.push(`/documents/${sentSuccessData.documentId}`); }}>
+        <DialogContent className="max-w-2xl bg-slate-900 border border-slate-800 text-white">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-bold text-white">Envelope Dispatched Successfully! 🚀</DialogTitle>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  "{sentSuccessData?.title}" is live. You can copy the client signing links or share directly via WhatsApp.
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="py-3 space-y-3">
+            <div className="text-xs font-semibold text-slate-300">Client Direct Signing Links:</div>
+            <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+              {(sentSuccessData?.recipients || []).map((r: any, i: number) => {
+                const tokenOrId = r.token || r.id;
+                const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lunar-sign.netlify.app';
+                const signingUrl = `${origin}/s/${tokenOrId}`;
+                const isCopied = copiedSuccessIndex === i;
+
+                const copyLink = () => {
+                  navigator.clipboard.writeText(signingUrl);
+                  setCopiedSuccessIndex(i);
+                  setTimeout(() => setCopiedSuccessIndex(null), 2500);
+                };
+
+                const shareWhatsApp = () => {
+                  const text = encodeURIComponent(`Hello ${r.name}, please review and sign "${sentSuccessData.title}" electronically here: ${signingUrl}`);
+                  window.open(`https://wa.me/?text=${text}`, '_blank');
+                };
+
+                return (
+                  <div key={i} className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="font-bold text-slate-200">
+                        {r.name} <span className="font-mono text-[11px] text-slate-500 font-normal">({r.email})</span>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] text-indigo-400 border-indigo-500/30">
+                        Signer #{i + 1}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={signingUrl}
+                        className="flex-1 bg-slate-900 text-slate-300 font-mono text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-700 select-all"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={copyLink}
+                        className={`text-xs h-7 px-2.5 font-semibold transition-all ${
+                          isCopied
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                        }`}
+                      >
+                        {isCopied ? (
+                          <span className="flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Copied!
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <Copy className="w-3 h-3" /> Copy Link
+                          </span>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={shareWhatsApp}
+                        className="text-xs h-7 px-2.5 border-emerald-500/40 text-emerald-400 hover:bg-emerald-950/40 font-semibold"
+                        title="Share on WhatsApp"
+                      >
+                        <MessageCircle className="w-3 h-3 mr-1" /> WhatsApp
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 border-t border-slate-800 pt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push('/documents')}
+              className="text-xs border-slate-700 text-slate-300"
+            >
+              Go to All Documents
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => router.push(`/documents/${sentSuccessData?.documentId}`)}
+              className="bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-600/25"
+            >
+              Open Document Details <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

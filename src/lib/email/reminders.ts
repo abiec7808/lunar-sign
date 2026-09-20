@@ -57,7 +57,7 @@ export async function processExpiringDocumentReminders(): Promise<ReminderCheckR
       `SELECT d.id, d.title, d.expires_at, d.signing_order_enforced,
               u.full_name as sender_name, o.name as org_name
        FROM documents d
-       LEFT JOIN users u ON d.created_by = u.id
+       LEFT JOIN profiles u ON d.created_by = u.id
        LEFT JOIN organisations o ON d.org_id = o.id
        WHERE d.status IN ('sent', 'partially_signed')
          AND d.expires_at IS NOT NULL

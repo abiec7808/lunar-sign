@@ -47,7 +47,7 @@ export const ECTA_SCHEDULE_2_EXCLUSIONS: EctaExclusion[] = [
 
 export const ECTA_SPECIAL_FORMALITY_NOTICE = `Notice on Formalities: Certain legal documents — including suretyships (General Law Amendment Act 50 of 1956), antenuptial contracts (Matrimonial Property Act 88 of 1984), and documents requiring commissioning or notarial execution (such as deeds of trust or sworn affidavits) — carry special statutory formalities or require an Advanced Electronic Signature (AES) or commissioner of oaths presence.`;
 
-export function getEctaLegalNotice(appName = 'Lunar Sign', verificationUrl = 'https://sign.lunaposgeorge.co.za/verify'): string {
+export function getEctaLegalNotice(appName = 'Lunar Sign', verificationUrl = 'https://lunar-sign.netlify.app/verify'): string {
   return ECTA_LEGAL_NOTICE_TEMPLATE
     .replace(/{app_name}/g, appName)
     .replace(/{verification_url}/g, verificationUrl);

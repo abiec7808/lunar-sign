@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processExpiringDocumentReminders } from '@/lib/email/reminders';
+import { checkAndTriggerSequentialSigners } from '@/lib/email/sequential-trigger';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/reminders/check - Process expiring documents and send 1-day reminders
+ * GET /api/reminders/check - Process expiring documents & trigger next sequential signers
  */
 export async function GET(req: NextRequest) {
   try {
-    const result = await processExpiringDocumentReminders();
+    const remindersResult = await processExpiringDocumentReminders();
+    const sequentialResult = await checkAndTriggerSequentialSigners();
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
-      result,
+      remindersResult,
+      sequentialResult,
     });
   } catch (error: any) {
     console.error('Failed to process reminders:', error);

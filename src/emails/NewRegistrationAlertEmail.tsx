@@ -31,7 +31,7 @@ export function NewRegistrationAlertEmail({
   vatNumber = '4123456789',
   companyRegNumber = '2026/123456/07',
   address = 'George, Western Cape, South Africa',
-  approvalUrl = 'https://sign.lunaposgeorge.co.za/businesses',
+  approvalUrl = 'https://lunar-sign.netlify.app/businesses',
 }: NewRegistrationAlertEmailProps) {
   return (
     <Html>

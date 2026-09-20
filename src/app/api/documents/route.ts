@@ -49,17 +49,19 @@ export async function GET(req: NextRequest) {
   try {
     const auth = await getAuthenticatedUserWithOrg();
     const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
+    const isSuperAdmin = !!auth?.isSuperAdmin;
 
     const docsRes = await dbQuery(
       `SELECT d.*,
               COUNT(r.id) AS total_recipients,
-              COUNT(CASE WHEN r.status = 'signed' THEN 1 END) AS signed_recipients
+              COUNT(CASE WHEN r.status = 'signed' THEN 1 END) AS signed_recipients,
+              json_agg(json_build_object('id', r.id, 'name', r.name, 'email', r.email, 'status', r.status, 'role', r.role, 'order_index', r.order_index) ORDER BY r.order_index ASC) FILTER (WHERE r.id IS NOT NULL) as recipients_list
        FROM documents d
        LEFT JOIN recipients r ON d.id = r.document_id
-       WHERE d.org_id = $1
+       WHERE d.org_id = $1 OR $2 = true OR d.org_id = '11111111-1111-1111-1111-111111111111'
        GROUP BY d.id
        ORDER BY d.created_at DESC`,
-      [orgId]
+      [orgId, isSuperAdmin]
     );
 
     // Asynchronously check for expiring documents and send 1-day reminders if needed
@@ -346,7 +348,13 @@ export async function POST(req: NextRequest) {
       success: true,
       documentId: doc.id,
       title: doc.title,
-      recipients: insertedRecipients.map((r) => ({ name: r.name, email: r.email, token: r.token })),
+      recipients: insertedRecipients.map((r) => ({
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        token: r.token,
+        signingUrl: `/s/${r.token}`,
+      })),
     });
   } catch (err: unknown) {
     console.error('Error creating document:', err);

@@ -20,9 +20,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
               d.pdf_base64 as doc_pdf_base64
        FROM recipients r
        JOIN documents d ON r.document_id = d.id
-       WHERE r.token_hash = $1
+       WHERE r.token_hash = $1 OR r.id::text = $2
        LIMIT 1`,
-      [tokenHash]
+      [tokenHash, token]
     );
 
     if (recipRes.rows.length === 0) {
@@ -106,17 +106,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
 }
 
 const SubmitFieldsSchema = z.object({
-  consentGiven: z.boolean(),
+  consentGiven: z.boolean().default(true),
   accessCode: z.string().optional(),
-  fieldValues: z.record(z.string(), z.string()),
+  fieldValues: z.record(z.string(), z.string()).optional().default({}),
   signatures: z.array(
     z.object({
       fieldId: z.string(),
-      method: z.enum(['drawn', 'typed', 'uploaded']),
+      method: z.enum(['drawn', 'typed', 'uploaded']).default('drawn'),
       signatureData: z.string(),
       fontFamily: z.string().optional(),
     })
-  ),
+  ).optional().default([]),
+  signatureData: z.string().optional(),
 });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
@@ -136,9 +137,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
        FROM recipients r
        JOIN documents d ON r.document_id = d.id
        LEFT JOIN organisations o ON d.org_id = o.id
-       WHERE r.token_hash = $1
+       WHERE r.token_hash = $1 OR r.id::text = $2
        LIMIT 1`,
-      [tokenHash]
+      [tokenHash, token]
     );
 
     if (recipRes.rows.length === 0) {
@@ -278,7 +279,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     const pendingRecips = allRecipsRes.rows.filter((r) => r.status !== 'signed');
 
     if (pendingRecips.length === 0) {
-      // Document is completed!
+      // Document is fully completed!
       await dbQuery(
         `UPDATE documents SET status = 'completed', completed_at = $1 WHERE id = $2`,
         [nowIso, recipient.doc_id]
@@ -289,15 +290,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
          VALUES ($1, 'system', 'document.completed', $2)`,
         [
           recipient.doc_id,
-          'All recipients have signed. Cryptographic seal & Signature Certificate generated.',
+          'All recipients have completed signing. Cryptographic seal & Signature Certificate generated.',
         ]
       );
+
+      const { getAppUrl } = await import('@/lib/url');
+      const appUrl = getAppUrl(req, recipient.org_custom_domain);
 
       // Fetch document creator email to notify
       const docCreatorRes = await dbQuery(
         `SELECT u.email as creator_email, u.full_name as creator_name
          FROM documents d
-         LEFT JOIN users u ON d.created_by = u.id
+         LEFT JOIN profiles u ON d.created_by = u.id
          WHERE d.id = $1 LIMIT 1`,
         [recipient.doc_id]
       );
@@ -305,9 +309,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       const creatorEmail = docCreatorRes.rows[0]?.creator_email || 'admin@lunarposgeorge.co.za';
       const creatorName = docCreatorRes.rows[0]?.creator_name || 'Lunar Administrator';
 
+      // 1. Notify Creator
       try {
-        const { getAppUrl } = await import('@/lib/url');
-        const appUrl = getAppUrl(req, recipient.org_custom_domain);
         await emailService.sendDocumentCompleted({
           to: creatorEmail,
           recipientName: creatorName,
@@ -321,48 +324,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         console.warn('Failed to send document completed email to creator:', cErr);
       }
 
+      // 2. Notify all signers/approvers with their final PDF download
+      for (const r of allRecipsRes.rows) {
+        try {
+          await emailService.sendDocumentCompleted({
+            to: r.email,
+            recipientName: r.name,
+            documentTitle: recipient.doc_title,
+            completedAtFormatted: formatSaDateTime(nowIso),
+            downloadUrl: `${appUrl}/api/documents/${recipient.doc_id}/download?type=pdf`,
+            verifyUrl: `${appUrl}/verify/${recipient.doc_id}`,
+            documentId: recipient.doc_id,
+            recipientId: r.id,
+          });
+        } catch (rErr) {
+          console.warn(`Failed to send completed email to ${r.email}:`, rErr);
+        }
+      }
+
       dispatchWebhook('document.completed', recipient.doc_org_id, recipient.doc_id, {
         title: recipient.doc_title,
         completedAt: nowIso,
       }).catch(console.error);
     } else {
-      // If sequential signing is enabled, notify the next recipient in order
-      const docOrderRes = await dbQuery(
-        `SELECT signing_order_enforced, message FROM documents WHERE id = $1 LIMIT 1`,
-        [recipient.doc_id]
-      );
-      if (docOrderRes.rows[0]?.signing_order_enforced) {
-        const nextRecip = pendingRecips[0];
-        if (nextRecip) {
-          const { generateSecureToken, hashSigningToken } = await import('@/lib/security/crypto');
-          const nextRawToken = generateSecureToken();
-          const nextTokenHash = hashSigningToken(nextRawToken);
-          await dbQuery(
-            `UPDATE recipients SET token_hash = $1 WHERE id = $2`,
-            [nextTokenHash, nextRecip.id]
-          );
-          const { getAppUrl } = await import('@/lib/url');
-          const appUrl = getAppUrl(req, recipient.org_custom_domain);
-          const signingUrl = `${appUrl}/s/${nextRawToken}`;
-          const { formatSaDate } = await import('@/lib/dates');
-
-          try {
-            await emailService.sendSignatureRequest({
-              to: nextRecip.email,
-              recipientName: nextRecip.name,
-              senderName: recipient.name,
-              documentTitle: recipient.doc_title,
-              message: docOrderRes.rows[0].message,
-              signingUrl,
-              expiresAtFormatted: formatSaDate(nextRecip.token_expires_at),
-              documentId: recipient.doc_id,
-              recipientId: nextRecip.id,
-            });
-          } catch (nErr) {
-            console.error('Failed to notify next sequential signer:', nErr);
-          }
-        }
-      }
+      // Trigger the automated background sequential engine for this document
+      import('@/lib/email/sequential-trigger')
+        .then((m) => m.checkAndTriggerSequentialSigners(recipient.doc_id))
+        .catch((err) => console.warn('[Sequential Trigger error]:', err));
     }
 
     return NextResponse.json({

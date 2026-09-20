@@ -25,7 +25,7 @@ export function ReminderEmail({
   recipientName = 'Signer',
   senderName = 'Lunar Admin',
   documentTitle = 'Service Agreement',
-  signingUrl = 'https://sign.lunaposgeorge.co.za/s/token',
+  signingUrl = 'https://lunar-sign.netlify.app/s/token',
   expiresAtFormatted = '30 October 2026',
   primaryColor = '#f59e0b', // Amber
 }: ReminderEmailProps) {

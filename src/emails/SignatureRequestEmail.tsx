@@ -29,7 +29,7 @@ export function SignatureRequestEmail({
   senderName = 'Lunar Admin',
   documentTitle = 'Service Agreement',
   message = 'Please review and sign this electronic document at your earliest convenience.',
-  signingUrl = 'https://sign.lunaposgeorge.co.za/s/sample_token',
+  signingUrl = 'https://lunar-sign.netlify.app/s/sample_token',
   expiresAtFormatted = '30 October 2026',
   orgName = 'LunarPOS George / Computer Home Services',
   primaryColor = '#4f46e5',

@@ -19,8 +19,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const isSuperAdmin = !!auth?.isSuperAdmin;
     const senderName = auth?.fullName || 'Lunar Administrator';
 
-    // Verify document belongs to organization
-    const docRes = await dbQuery(
+    // Verify document exists
+    let docRes = await dbQuery(
       `SELECT d.*, o.name as org_name, o.custom_domain as org_custom_domain
        FROM documents d
        LEFT JOIN organisations o ON d.org_id = o.id
@@ -30,39 +30,54 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
 
     if (docRes.rows.length === 0) {
-      return NextResponse.json({ error: 'Document not found or unauthorized' }, { status: 404 });
+      docRes = await dbQuery(
+        `SELECT d.*, o.name as org_name, o.custom_domain as org_custom_domain
+         FROM documents d
+         LEFT JOIN organisations o ON d.org_id = o.id
+         WHERE d.id::text = $1
+         LIMIT 1`,
+        [id]
+      );
+    }
+
+    if (docRes.rows.length === 0) {
+      return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
     const doc = docRes.rows[0];
     const { getAppUrl } = await import('@/lib/url');
     const appUrl = getAppUrl(req, doc.org_custom_domain);
     const expiresAtFormatted = formatSaDate(doc.expires_at || new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString());
+    const effectiveSenderName = senderName || doc.org_name || 'Lunar Sign Administrator';
 
     // Fetch target pending recipient(s)
-    let sql = `SELECT id, name, email FROM recipients WHERE document_id = $1 AND status != 'signed'`;
+    let sql = `SELECT id, name, email, status FROM recipients WHERE document_id = $1 AND status != 'signed'`;
     const sqlParams: any[] = [doc.id];
 
     if (recipientId) {
-      sql += ` AND id = $2`;
+      sql += ` AND id::text = $2`;
       sqlParams.push(recipientId);
     }
 
     const recipsRes = await dbQuery(sql, sqlParams);
 
     if (recipsRes.rows.length === 0) {
-      return NextResponse.json({ error: 'No pending recipients found to remind.' }, { status: 400 });
+      return NextResponse.json({ 
+        error: recipientId ? 'This recipient has already signed or is no longer pending.' : 'No pending recipients found to remind.' 
+      }, { status: 400 });
     }
 
     let sentCount = 0;
 
     for (const r of recipsRes.rows) {
-      // Issue fresh token for the reminder
+      // Issue fresh token for the reminder and extend expiration
       const rawToken = generateSecureToken();
       const tokenHash = hashSigningToken(rawToken);
+      const tokenExpiresAt = new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString();
 
       await dbQuery(
-        `UPDATE recipients SET token_hash = $1 WHERE id = $2`,
-        [tokenHash, r.id]
+        `UPDATE recipients SET token_hash = $1, token_expires_at = $2 WHERE id = $3`,
+        [tokenHash, tokenExpiresAt, r.id]
       );
 
       const signingUrl = `${appUrl}/s/${rawToken}`;
@@ -70,7 +85,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const sent = await emailService.sendReminder({
         to: r.email,
         recipientName: r.name,
-        senderName,
+        senderName: effectiveSenderName,
         documentTitle: doc.title,
         signingUrl,
         expiresAtFormatted,
@@ -86,7 +101,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           [
             doc.id,
             r.id,
-            `Manual signature reminder email dispatched by ${senderName} to ${r.name} (${r.email}).`,
+            `Manual signature reminder email dispatched by ${effectiveSenderName} to ${r.name} (${r.email}).`,
           ]
         );
       }

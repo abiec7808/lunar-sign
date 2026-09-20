@@ -26,6 +26,10 @@ import {
   Archive,
   ArchiveRestore,
   ShieldCheck,
+  Link2,
+  Copy,
+  Check,
+  MessageCircle,
 } from 'lucide-react';
 import { formatSaDate } from '@/lib/dates';
 import { EctaExclusionsModal } from '@/components/admin/EctaExclusionsModal';
@@ -45,23 +49,31 @@ export default function DocumentsListPage() {
       if (res.ok) {
         const data = await res.json();
         setDocuments(
-          (data.documents || []).map((d: any) => ({
-            id: d.id,
-            title: d.title,
-            recipients: [
-              {
-                name: `${d.signed_recipients || 0} of ${d.total_recipients || 1} Signed`,
-                email: '',
-                status: d.status === 'completed' ? 'signed' : 'opened',
-              },
-            ],
-            status: d.status,
-            is_archived: !!d.is_archived,
-            archived_at: d.archived_at,
-            page_count: d.page_count || 1,
-            created_at: d.created_at,
-            completed_at: d.completed_at,
-          }))
+          (data.documents || []).map((d: any) => {
+            const parsedRecips = Array.isArray(d.recipients_list) && d.recipients_list.length > 0
+              ? d.recipients_list
+              : [
+                  {
+                    name: `${d.signed_recipients || 0} of ${d.total_recipients || 1} Signed`,
+                    email: '',
+                    status: d.status === 'completed' ? 'signed' : 'opened',
+                  },
+                ];
+
+            return {
+              id: d.id,
+              title: d.title,
+              recipients: parsedRecips,
+              signed_count: d.signed_recipients || 0,
+              total_count: d.total_recipients || parsedRecips.length || 1,
+              status: d.status,
+              is_archived: !!d.is_archived,
+              archived_at: d.archived_at,
+              page_count: d.page_count || 1,
+              created_at: d.created_at,
+              completed_at: d.completed_at,
+            };
+          })
         );
       }
     } catch (err) {
@@ -77,6 +89,28 @@ export default function DocumentsListPage() {
 
   const [actionLoading, setActionLoading] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
+  const [copiedRecipientId, setCopiedRecipientId] = useState<string | null>(null);
+
+  const handleCopySigningLink = (recipientIdOrDocId: string, docTitle: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lunar-sign.netlify.app';
+    const url = `${origin}/s/${recipientIdOrDocId}`;
+    navigator.clipboard.writeText(url);
+    setCopiedRecipientId(recipientIdOrDocId);
+    setNotification(`📋 Copied signing link for "${docTitle}"! You can now share it directly.`);
+    setTimeout(() => {
+      setCopiedRecipientId(null);
+      setNotification(null);
+    }, 4000);
+  };
+
+  const handleWhatsAppShare = (recipientIdOrDocId: string, docTitle: string, signerName?: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lunar-sign.netlify.app';
+    const url = `${origin}/s/${recipientIdOrDocId}`;
+    const text = encodeURIComponent(`Hello${signerName ? ' ' + signerName : ''}, please review and sign "${docTitle}" electronically here: ${url}`);
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
 
   const handleArchiveToggle = async (id: string, title: string, archive: boolean) => {
     try {
@@ -439,23 +473,56 @@ export default function DocumentsListPage() {
                             </div>
                           </td>
                           <td className="py-4 px-4">
-                            <div className="space-y-1">
-                              {doc.recipients?.map((r: any, i: number) => (
-                                <div key={i} className="flex items-center gap-1.5 text-xs text-slate-300">
-                                  <span
-                                    className={`w-2 h-2 rounded-full ${
-                                      r.status === 'signed'
-                                        ? 'bg-emerald-400'
-                                        : r.status === 'opened'
-                                        ? 'bg-amber-400'
-                                        : r.status === 'declined'
-                                        ? 'bg-red-400'
-                                        : 'bg-slate-600'
-                                    }`}
-                                  />
-                                  <span className="truncate max-w-[160px]">{r.name}</span>
-                                </div>
-                              ))}
+                            <div className="space-y-1.5">
+                              {doc.recipients?.map((r: any, i: number) => {
+                                const recipIdentifier = r.id || doc.id;
+                                const isCopied = copiedRecipientId === recipIdentifier;
+                                return (
+                                  <div key={i} className="flex items-center justify-between gap-2 text-xs text-slate-300 bg-slate-950/40 px-2 py-1 rounded-lg border border-slate-800/60 max-w-[280px]">
+                                    <div className="flex items-center gap-1.5 min-w-0 truncate">
+                                      <span
+                                        className={`w-2 h-2 rounded-full shrink-0 ${
+                                          r.status === 'signed'
+                                            ? 'bg-emerald-400'
+                                            : r.status === 'opened'
+                                            ? 'bg-amber-400'
+                                            : r.status === 'declined'
+                                            ? 'bg-red-400'
+                                            : 'bg-indigo-400'
+                                        }`}
+                                      />
+                                      <span className="truncate font-medium text-slate-200" title={r.email ? `${r.name} (${r.email})` : r.name}>
+                                        {r.name}
+                                      </span>
+                                    </div>
+                                    
+                                    {r.status !== 'signed' && (
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => handleCopySigningLink(recipIdentifier, doc.title, e)}
+                                          title="Copy direct signing link for this client"
+                                          className={`p-1 rounded transition-colors ${
+                                            isCopied
+                                              ? 'bg-emerald-500/20 text-emerald-400'
+                                              : 'hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300'
+                                          }`}
+                                        >
+                                          {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => handleWhatsAppShare(recipIdentifier, doc.title, r.name, e)}
+                                          title="Share signing link via WhatsApp"
+                                          className="p-1 rounded hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 transition-colors"
+                                        >
+                                          <MessageCircle className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </td>
                           <td className="py-4 px-4">
@@ -477,6 +544,20 @@ export default function DocumentsListPage() {
                           </td>
                           <td className="py-4 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {doc.status !== 'completed' && doc.status !== 'voided' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    const firstPending = doc.recipients?.find((r: any) => r.status !== 'signed');
+                                    handleCopySigningLink(firstPending?.id || doc.id, doc.title, e);
+                                  }}
+                                  title="Copy signing link to share with client"
+                                  className="text-xs h-7 px-2 border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/40"
+                                >
+                                  <Copy className="w-3 h-3 mr-1" /> Copy Link
+                                </Button>
+                              )}
                               {(doc.status === 'completed' || doc.is_archived) && (
                                 <a
                                   href={`/api/documents/${doc.id}/download`}

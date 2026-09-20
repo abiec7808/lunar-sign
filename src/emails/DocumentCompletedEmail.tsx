@@ -27,8 +27,8 @@ export interface DocumentCompletedEmailProps {
 export function DocumentCompletedEmail({
   recipientName = 'Signatory',
   documentTitle = 'Executed Service Agreement',
-  downloadUrl = 'https://sign.lunaposgeorge.co.za/verify/sample_doc_id',
-  verifyUrl = 'https://sign.lunaposgeorge.co.za/verify/sample_doc_id',
+  downloadUrl = 'https://lunar-sign.netlify.app/verify/sample_doc_id',
+  verifyUrl = 'https://lunar-sign.netlify.app/verify/sample_doc_id',
   finalHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
   completedAtFormatted = '19 September 2026, 14:30 SAST',
   orgName = 'LunarPOS George / Computer Home Services',

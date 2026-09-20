@@ -14,7 +14,7 @@ export interface CertificateOptions {
 }
 
 export async function generateSignatureCertificate(options: CertificateOptions): Promise<Buffer> {
-  const { document, recipients, auditEvents, signatures = [], baseUrl = 'https://sign.lunaposgeorge.co.za' } = options;
+  const { document, recipients, auditEvents, signatures = [], baseUrl = 'https://lunar-sign.netlify.app' } = options;
 
   const pdfDoc = await PDFDocument.create();
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);

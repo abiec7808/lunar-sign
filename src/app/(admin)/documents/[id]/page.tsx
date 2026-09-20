@@ -28,6 +28,9 @@ import {
   Trash2,
   Archive,
   ArchiveRestore,
+  Link2,
+  MessageCircle,
+  Send,
 } from 'lucide-react';
 import { formatSaDateTime, formatSaDate } from '@/lib/dates';
 
@@ -78,11 +81,23 @@ export default function DocumentDetailPage() {
     loadDoc();
   }, [docId]);
 
-  const handleCopySigningLink = (token: string, index: number) => {
-    const url = `${window.location.origin}/s/${token}`;
+  const handleCopySigningLink = (tokenOrId: string, index?: number) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lunar-sign.netlify.app';
+    const url = `${origin}/s/${tokenOrId}`;
     navigator.clipboard.writeText(url);
-    setCopiedLinkIndex(index);
-    setTimeout(() => setCopiedLinkIndex(null), 2000);
+    if (index !== undefined) {
+      setCopiedLinkIndex(index);
+      setTimeout(() => setCopiedLinkIndex(null), 2500);
+    } else {
+      alert(`Copied signing link to clipboard:\n${url}`);
+    }
+  };
+
+  const handleWhatsAppShare = (tokenOrId: string, signerName?: string) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lunar-sign.netlify.app';
+    const url = `${origin}/s/${tokenOrId}`;
+    const text = encodeURIComponent(`Hello${signerName ? ' ' + signerName : ''}, please review and sign "${document.title}" electronically here: ${url}`);
+    window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 
   const handleArchiveToggle = async (archive: boolean) => {
@@ -179,6 +194,7 @@ export default function DocumentDetailPage() {
       const data = await res.json();
       if (res.ok) {
         alert(data.message || 'Reminder email successfully sent!');
+        await loadDoc();
       } else {
         alert(data.error || 'Failed to send reminder.');
       }
@@ -245,6 +261,20 @@ export default function DocumentDetailPage() {
                   <Archive className="w-3.5 h-3.5 mr-1" /> Move to Archive
                 </Button>
               )
+            )}
+            {!isAllSigned && recipients.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const firstPending = recipients.find((r) => r.status !== 'signed') || recipients[0];
+                  handleCopySigningLink(firstPending.token || firstPending.id);
+                }}
+                className="text-xs border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/40 font-semibold"
+                title="Copy signing link to clipboard"
+              >
+                <Copy className="w-3.5 h-3.5 mr-1" /> Copy Signing Link
+              </Button>
             )}
             {!isAllSigned && document.status !== 'voided' && (
               <Button
@@ -368,6 +398,99 @@ export default function DocumentDetailPage() {
           </div>
         </div>
 
+        {/* Direct Signing Links (Client Share & WhatsApp) */}
+        {recipients.length > 0 && (
+          <Card className="bg-gradient-to-r from-indigo-950/50 via-slate-900 to-slate-900/90 border border-indigo-500/30 rounded-2xl shadow-lg">
+            <CardHeader className="pb-3 border-b border-indigo-500/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold">
+                    <Link2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm font-bold text-white">Client Direct Signing Links & Fast Share</CardTitle>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Send the signing link directly to your client via WhatsApp, SMS, or direct email.
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[10px] text-indigo-300 border-indigo-500/30 bg-indigo-950/60">
+                  Instant Link Access
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 space-y-3">
+              {recipients.map((r, i) => {
+                const tokenOrId = r.token || r.id;
+                const isCopied = copiedLinkIndex === i;
+                const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lunar-sign.netlify.app';
+                const signingUrl = `${origin}/s/${tokenOrId}`;
+
+                return (
+                  <div
+                    key={r.id || i}
+                    className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-full bg-indigo-600/30 text-indigo-300 flex items-center justify-center font-bold text-xs shrink-0">
+                        #{i + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-white truncate">{r.name}</span>
+                          <Badge variant={r.status === 'signed' ? 'success' : 'default'} className="text-[10px] py-0 px-1.5 h-4">
+                            {r.status === 'signed' ? 'Signed' : 'Pending'}
+                          </Badge>
+                        </div>
+                        <div className="text-[11px] font-mono text-slate-400 truncate">{r.email}</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                      <div className="relative flex-1 md:w-72">
+                        <input
+                          type="text"
+                          readOnly
+                          value={signingUrl}
+                          className="w-full bg-slate-900 text-slate-300 font-mono text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 select-all"
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handleCopySigningLink(tokenOrId, i)}
+                        className={`text-xs h-8 px-3 font-semibold transition-all ${
+                          isCopied
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                        }`}
+                      >
+                        {isCopied ? (
+                          <span className="flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" /> Copied!
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <Copy className="w-3.5 h-3.5" /> Copy Link
+                          </span>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleWhatsAppShare(tokenOrId, r.name)}
+                        className="text-xs h-8 px-3 border-emerald-500/40 text-emerald-400 hover:bg-emerald-950/40 font-semibold"
+                        title="Share on WhatsApp"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 mr-1" /> WhatsApp
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Tab Navigation */}
         <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)}>
           <TabsList className="bg-slate-900 border border-slate-800">
@@ -482,23 +605,34 @@ export default function DocumentDetailPage() {
                           <Bell className="w-3 h-3 mr-1" /> Send Reminder
                         </Button>
                       )}
-                      {r.token && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleCopySigningLink(r.token, i)}
-                          className="text-xs text-indigo-400 hover:text-indigo-300 h-7 ml-auto"
-                        >
-                          {copiedLinkIndex === i ? (
-                            <span className="text-emerald-400 flex items-center gap-1">
-                              <Check className="w-3 h-3" /> Copied!
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1">
-                              <Copy className="w-3 h-3" /> Copy Link
-                            </span>
-                          )}
-                        </Button>
+                      {(r.token || r.id) && r.status !== 'signed' && (
+                        <div className="flex items-center gap-1 ml-auto">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleCopySigningLink(r.token || r.id, i)}
+                            className="text-xs text-indigo-400 hover:text-indigo-300 h-7"
+                          >
+                            {copiedLinkIndex === i ? (
+                              <span className="text-emerald-400 flex items-center gap-1">
+                                <Check className="w-3 h-3" /> Copied!
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1">
+                                <Copy className="w-3 h-3" /> Copy Link
+                              </span>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleWhatsAppShare(r.token || r.id, r.name)}
+                            className="text-xs text-emerald-400 hover:text-emerald-300 h-7"
+                            title="Share on WhatsApp"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 mr-1" /> WhatsApp
+                          </Button>
+                        </div>
                       )}
                     </div>
                   </CardContent>
