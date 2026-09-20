@@ -92,16 +92,16 @@ export function FieldConfigDialog({
         <div className="space-y-4 my-2">
           {/* Recipient Assignment */}
           <div>
-            <Label className="text-slate-300">Assign Field To</Label>
+            <Label className="text-slate-300">Assign Field To Signatory</Label>
             <select
               value={recipientId || ''}
               onChange={(e) => setRecipientId(e.target.value || null)}
-              className="mt-1 w-full h-10 px-3 rounded-lg border border-slate-700 bg-slate-950 text-slate-100 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
+              className="mt-1 w-full h-10 px-3 rounded-lg border border-slate-700 bg-slate-950 text-slate-100 text-sm focus:ring-1 focus:ring-indigo-500 outline-none font-medium"
             >
               <option value="">Sender (Pre-fill before sending)</option>
-              {recipients.map((r) => (
+              {recipients.map((r, i) => (
                 <option key={r.id} value={r.id}>
-                  {r.name} ({r.email}) - {r.role}
+                  {`Signer ${i + 1}: ${r.name || 'Unnamed'} (${r.email || 'No email'}) - ${r.role || 'signer'}`}
                 </option>
               ))}
             </select>

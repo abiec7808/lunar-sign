@@ -15,7 +15,7 @@ import { FieldPalette } from '@/components/editor/FieldPalette';
 import { InteractivePdfCanvas } from '@/components/editor/InteractivePdfCanvas';
 import { FieldConfigDialog } from '@/components/editor/FieldConfigDialog';
 import { DocumentField, Recipient, FieldType, RecipientRole, RecipientAuthMethod } from '@/types';
-import { getRecipientColor } from '@/lib/utils';
+import { getRecipientColor, getRecipientTheme } from '@/lib/utils';
 import { renderPdfPagesFromBuffer, createDefaultSamplePdf, RenderedPage } from '@/lib/pdf/pdf-browser';
 import {
   Upload,
@@ -523,62 +523,73 @@ export default function NewDocumentPage() {
               </div>
 
               <div className="space-y-3">
-                {recipients.map((recip, index) => (
-                  <div
-                    key={recip.id}
-                    className="p-4 rounded-xl border border-slate-800 bg-slate-950/80 flex flex-col md:flex-row items-center gap-3"
-                  >
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: recip.color }} />
-                      <span className="text-xs font-mono font-bold text-slate-400">#{index + 1}</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 flex-1 w-full">
-                      <Input
-                        placeholder="Full Legal Name"
-                        value={recip.name}
-                        onChange={(e) => handleUpdateRecipient(recip.id, { name: e.target.value })}
-                        className="bg-slate-900 border-slate-700 text-xs"
-                      />
-                      <Input
-                        type="email"
-                        placeholder="Email Address"
-                        value={recip.email}
-                        onChange={(e) => handleUpdateRecipient(recip.id, { email: e.target.value })}
-                        className="bg-slate-900 border-slate-700 text-xs"
-                      />
-                      <select
-                        value={recip.role}
-                        onChange={(e) => handleUpdateRecipient(recip.id, { role: e.target.value as RecipientRole })}
-                        className="h-10 px-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-200 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
-                      >
-                        <option value="signer">Signer (Must Sign)</option>
-                        <option value="approver">Approver (Review Only)</option>
-                        <option value="filler">Filler (Form Data)</option>
-                        <option value="viewer">Viewer (CC Copy)</option>
-                      </select>
-                      <select
-                        value={recip.auth_method}
-                        onChange={(e) => handleUpdateRecipient(recip.id, { auth_method: e.target.value as RecipientAuthMethod })}
-                        className="h-10 px-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-200 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
-                      >
-                        <option value="none">No Extra Passcode</option>
-                        <option value="access_code">Access Code (Passcode)</option>
-                        <option value="email_otp">Emailed 6-Digit OTP</option>
-                      </select>
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveRecipient(recip.id)}
-                      className="text-slate-400 hover:text-red-400 shrink-0"
+                {recipients.map((recip, index) => {
+                  const theme = getRecipientTheme(recip.color || index);
+                  return (
+                    <div
+                      key={recip.id}
+                      className="p-4 rounded-xl border border-slate-800 bg-slate-950/80 flex flex-col md:flex-row items-center gap-3"
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div
+                          className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shadow-sm"
+                          style={{ backgroundColor: theme.badgeBg, color: theme.badgeText }}
+                          title={`Color: ${theme.name}`}
+                        >
+                          #{index + 1}
+                        </div>
+                        <div className="hidden lg:block text-[11px] font-semibold text-slate-400">
+                          {theme.name}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 flex-1 w-full">
+                        <Input
+                          placeholder="Full Legal Name"
+                          value={recip.name}
+                          onChange={(e) => handleUpdateRecipient(recip.id, { name: e.target.value })}
+                          className="bg-slate-900 border-slate-700 text-xs"
+                        />
+                        <Input
+                          type="email"
+                          placeholder="Email Address"
+                          value={recip.email}
+                          onChange={(e) => handleUpdateRecipient(recip.id, { email: e.target.value })}
+                          className="bg-slate-900 border-slate-700 text-xs"
+                        />
+                        <select
+                          value={recip.role}
+                          onChange={(e) => handleUpdateRecipient(recip.id, { role: e.target.value as RecipientRole })}
+                          className="h-10 px-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-200 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                        >
+                          <option value="signer">Signer (Must Sign)</option>
+                          <option value="approver">Approver (Review Only)</option>
+                          <option value="filler">Filler (Form Data)</option>
+                          <option value="viewer">Viewer (CC Copy)</option>
+                        </select>
+                        <select
+                          value={recip.auth_method}
+                          onChange={(e) => handleUpdateRecipient(recip.id, { auth_method: e.target.value as RecipientAuthMethod })}
+                          className="h-10 px-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-200 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                        >
+                          <option value="none">No Extra Passcode</option>
+                          <option value="access_code">Access Code (Passcode)</option>
+                          <option value="email_otp">Emailed 6-Digit OTP</option>
+                        </select>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveRecipient(recip.id)}
+                        className="text-slate-400 hover:text-red-400 shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -591,32 +602,55 @@ export default function NewDocumentPage() {
           {/* Left Toolbox */}
           <FieldPalette
             onAddField={handleAddFieldFromPalette}
-            activeRecipientName={activeRecip ? activeRecip.name || `Signer (${activeRecip.email})` : 'Sender (Pre-fill)'}
+            activeRecipientName={activeRecip ? activeRecip.name || `Signer (${activeRecip.email || 'pending'})` : 'Sender (Pre-fill)'}
             activeColor={activeRecip?.color || '#6366f1'}
           />
 
           {/* Center Canvas with crisp PDF Document pages */}
           <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center bg-slate-950">
-            {/* Top Toolbar: Recipient selector & Page switcher */}
-            <div className="w-full max-w-[800px] flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 mb-4 shadow-lg">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 font-semibold">Placing Fields For:</span>
-                <select
-                  value={selectedRecipientId || ''}
-                  onChange={(e) => setSelectedRecipientId(e.target.value || null)}
-                  className="h-8 px-2.5 rounded-lg border border-slate-700 bg-slate-950 text-xs text-slate-100 font-medium focus:ring-1 focus:ring-indigo-500 outline-none"
+            {/* Top Toolbar: Interactive Signer Color Selector & Page Switcher */}
+            <div className="w-full max-w-[800px] flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 mb-4 shadow-lg gap-3">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-slate-400 font-semibold mr-1">Placing For:</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRecipientId(null)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border shrink-0 flex items-center gap-1.5 ${
+                    selectedRecipientId === null
+                      ? 'bg-slate-700 text-white border-slate-500 shadow'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
                 >
-                  <option value="">Sender (Pre-fill before send)</option>
-                  {recipients.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name || r.email} ({r.role})
-                    </option>
-                  ))}
-                </select>
+                  <span className="w-2 h-2 rounded-full bg-slate-400" />
+                  <span>Sender</span>
+                </button>
+                {recipients.map((r, i) => {
+                  const isSelected = selectedRecipientId === r.id;
+                  const theme = getRecipientTheme(r.color || i);
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => setSelectedRecipientId(r.id)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all border shrink-0 flex items-center gap-1.5 shadow-sm"
+                      style={{
+                        backgroundColor: isSelected ? theme.badgeBg : '#020617',
+                        color: isSelected ? theme.badgeText : '#cbd5e1',
+                        borderColor: isSelected ? theme.primary : `${theme.primary}50`,
+                      }}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: isSelected ? '#ffffff' : theme.primary }}
+                      />
+                      <span>{r.name ? r.name.split(' ')[0] : `Signer ${i + 1}`}</span>
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Page Navigator */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <span className="text-xs text-slate-400">Page:</span>
                 {(renderedPages.length > 0 ? renderedPages : [{ pageNumber: 1 }, { pageNumber: 2 }]).map((p, i) => (
                   <button

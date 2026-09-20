@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { DocumentField, Recipient } from '@/types';
-import { cn } from '@/lib/utils';
+import { cn, getRecipientTheme } from '@/lib/utils';
 import { validateSaId } from '@/lib/compliance/sa-id';
 import { validateSaVat } from '@/lib/compliance/sa-vat';
 import { formatSaDate } from '@/lib/dates';
@@ -47,7 +47,7 @@ export function FieldRenderer({
 }: FieldRendererProps) {
   const isSignerMode = mode === 'signer';
   const isEditorMode = mode === 'editor';
-  const recipientColor = recipient?.color || '#6366f1';
+  const recipientTheme = getRecipientTheme(recipient?.color || (recipient ? recipient.order_index : null));
 
   // Explicit or auto-calculated font size
   const customFontSize = (field.validation_rule as any)?.fontSize || (field.value_meta as any)?.fontSize;
@@ -108,33 +108,48 @@ export function FieldRenderer({
     }
   };
 
-  // 1. In Editor Mode: Display crisp placeholder box on white contract page with pure black text
+  // 1. In Editor Mode: Display distinct colored placeholder box with signer-specific pastel background and badge
   if (isEditorMode) {
+    const signerDisplayName = recipient?.name
+      ? recipient.name.split(' ')[0]
+      : recipient
+      ? `Signer ${(recipient.order_index ?? 0) + 1}`
+      : 'Sender';
+
     return (
       <div
         onClick={() => onSelectField?.(field)}
         className={cn(
-          'w-full h-full flex items-center justify-between px-1.5 py-0.5 rounded border-2 select-none cursor-pointer transition-all font-semibold overflow-hidden shadow-sm',
-          isSelected ? 'ring-2 ring-indigo-600 shadow-lg z-30 scale-[1.01]' : 'opacity-95 hover:opacity-100'
+          'w-full h-full flex items-center justify-between px-1.5 py-0.5 rounded-md border-2 select-none cursor-pointer transition-all font-semibold overflow-hidden shadow-sm',
+          isSelected ? 'ring-2 ring-offset-1 ring-indigo-600 shadow-md z-30 scale-[1.01]' : 'opacity-95 hover:opacity-100 hover:shadow'
         )}
         style={{
-          borderColor: recipientColor,
-          backgroundColor: '#ffffff',
+          borderColor: recipientTheme.primary,
+          backgroundColor: recipientTheme.bg,
           color: '#000000',
           ...arialFontStyle,
         }}
       >
-        <span className="flex items-center gap-1 font-bold truncate text-slate-950" style={{ fontSize: effectiveFontSize }}>
-          <span style={{ color: recipientColor }}>{renderIcon()}</span>
-          <span className="truncate">{field.label || field.type.toUpperCase()}</span>
+        <span className="flex items-center gap-1 font-bold truncate text-slate-950 min-w-0" style={{ fontSize: effectiveFontSize }}>
+          <span style={{ color: recipientTheme.primary }}>{renderIcon()}</span>
+          <span className="truncate text-slate-900">{field.label || field.type.toUpperCase()}</span>
           {field.required && <span className="text-red-600 font-bold ml-0.5">*</span>}
         </span>
-        <span className="truncate font-medium text-slate-600 ml-1 hidden sm:inline" style={{ fontSize: `max(8px, calc(${effectiveFontSize} - 2px))` }}>
-          {recipient ? recipient.name.split(' ')[0] : 'Sender'}
+        <span
+          className="shrink-0 flex items-center gap-1 font-bold rounded px-1.5 py-0.5 ml-1 select-none text-[10px] shadow-sm truncate max-w-[120px]"
+          style={{
+            backgroundColor: recipientTheme.badgeBg,
+            color: recipientTheme.badgeText,
+          }}
+          title={recipient ? `Signer: ${recipient.name || recipient.email}` : 'Assigned to Sender'}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0" />
+          <span className="truncate">{signerDisplayName}</span>
         </span>
       </div>
     );
   }
+
 
   // 2. In Signer Mode: Interactive inputs with pure Arial font & adjusted font size
   switch (field.type) {
