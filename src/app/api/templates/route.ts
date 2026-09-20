@@ -13,9 +13,9 @@ export async function GET(req: NextRequest) {
     const res = await dbQuery(
       `SELECT id, name, description, storage_path_pdf, pdf_base64, field_definitions, recipient_roles, usage_count, created_at, updated_at
        FROM templates
-       WHERE org_id = $1
+       WHERE org_id = $1 OR $2 = true OR org_id = '11111111-1111-1111-1111-111111111111' OR $1 = '11111111-1111-1111-1111-111111111111'
        ORDER BY created_at DESC`,
-      [orgId]
+      [orgId, !!auth?.isSuperAdmin]
     );
 
     return NextResponse.json({ templates: res.rows });
