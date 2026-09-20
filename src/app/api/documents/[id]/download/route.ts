@@ -123,7 +123,7 @@ export async function GET(
           created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
         },
       ],
-      baseUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunarposgeorge.co.za',
+      baseUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://lunar-sign.netlify.app',
     });
 
     let finalResponseBuffer: Buffer;
