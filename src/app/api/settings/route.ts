@@ -140,21 +140,25 @@ export async function PUT(req: NextRequest) {
     };
     await setSessionCookie(updatedSession);
 
-    // 5. Log audit event
-    await dbQuery(
-      `INSERT INTO audit_events (actor_type, event_type, description, metadata)
-       VALUES ('admin', 'org.settings_updated', $1, $2)`,
-      [
-        `Organisation settings and branding updated for "${updatedOrg.name}".`,
-        JSON.stringify({
-          orgId: updatedOrg.id,
-          name: updatedOrg.name,
-          primaryColor: updatedOrg.primary_color,
-          accentColor: updatedOrg.accent_color,
-          updatedBy: session.email,
-        }),
-      ]
-    );
+    // 5. Log audit event (safe non-blocking)
+    try {
+      await dbQuery(
+        `INSERT INTO audit_events (actor_type, event_type, description, metadata)
+         VALUES ('admin', 'org.settings_updated', $1, $2)`,
+        [
+          `Organisation settings and branding updated for "${updatedOrg.name}".`,
+          JSON.stringify({
+            orgId: updatedOrg.id,
+            name: updatedOrg.name,
+            primaryColor: updatedOrg.primary_color,
+            accentColor: updatedOrg.accent_color,
+            updatedBy: session.email,
+          }),
+        ]
+      );
+    } catch (auditErr) {
+      console.warn('Audit logging warning for settings update:', auditErr);
+    }
 
     return NextResponse.json({
       success: true,

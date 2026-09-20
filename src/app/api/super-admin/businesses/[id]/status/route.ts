@@ -58,21 +58,25 @@ export async function POST(
 
     const org = res.rows[0];
 
-    // Log super admin audit action
-    await dbQuery(
-      `INSERT INTO audit_events (actor_type, event_type, description, metadata)
-       VALUES ('admin', 'super_admin.org_status_updated', $1, $2)`,
-      [
-        `Super Admin approved/updated business "${org.name}" status to "${org.status}".`,
-        JSON.stringify({
-          orgId: org.id,
-          status: org.status,
-          maxUsers: org.max_users,
-          maxDocuments: org.max_documents,
-          updatedBy: auth.email,
-        }),
-      ]
-    );
+    // Log super admin audit action (safe non-blocking)
+    try {
+      await dbQuery(
+        `INSERT INTO audit_events (actor_type, event_type, description, metadata)
+         VALUES ('admin', 'super_admin.org_status_updated', $1, $2)`,
+        [
+          `Super Admin approved/updated business "${org.name}" status to "${org.status}".`,
+          JSON.stringify({
+            orgId: org.id,
+            status: org.status,
+            maxUsers: org.max_users,
+            maxDocuments: org.max_documents,
+            updatedBy: auth.email,
+          }),
+        ]
+      );
+    } catch (auditErr) {
+      console.warn('Audit logging warning for business status update:', auditErr);
+    }
 
     return NextResponse.json({
       success: true,
