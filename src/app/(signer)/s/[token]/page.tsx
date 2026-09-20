@@ -1,0 +1,376 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { EctaConsentModal } from '@/components/signer/EctaConsentModal';
+import { SignatureModal } from '@/components/signer/SignatureModal';
+import { DeclineModal } from '@/components/signer/DeclineModal';
+import { FieldNavigator } from '@/components/signer/FieldNavigator';
+import { InteractivePdfCanvas } from '@/components/editor/InteractivePdfCanvas';
+import { DocumentField, Recipient, SignatureMethod } from '@/types';
+import {
+  ShieldCheck,
+  Lock,
+  CheckCircle2,
+  Download,
+  AlertTriangle,
+  XCircle,
+  HelpCircle,
+  ExternalLink,
+} from 'lucide-react';
+import confetti from 'canvas-confetti';
+
+export default function SignerPortalPage() {
+  const params = useParams();
+  const token = (params?.token as string) || 'sample_token';
+
+  // Authentication & Consent States
+  const [authRequired, setAuthRequired] = useState(false);
+  const [accessCodeInput, setAccessCodeInput] = useState('');
+  const [authVerified, setAuthVerified] = useState(true);
+  const [isConsentModalOpen, setIsConsentModalOpen] = useState(true);
+  const [consentAccepted, setConsentAccepted] = useState(false);
+
+  // Signing UI States
+  const [isSigModalOpen, setIsSigModalOpen] = useState(false);
+  const [activeSigFieldId, setActiveSigFieldId] = useState<string | null>(null);
+  const [isDeclineModalOpen, setIsDeclineModalOpen] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [isDeclined, setIsDeclined] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+  const [currentFieldIndex, setCurrentFieldIndex] = useState(0);
+
+  // Stored Signer Signature session for reuse
+  const [savedSignatureData, setSavedSignatureData] = useState<string | null>(null);
+
+  // Mock Envelope Data
+  const [document, setDocument] = useState({
+    id: 'doc-001',
+    title: 'Standard South African Service Level Agreement (SLA)',
+    sender_name: 'LunarPOS George / Computer Home Services',
+    page_count: 2,
+    org_name: 'LunarPOS George',
+    primary_color: '#6366f1',
+  });
+
+  const [recipient, setRecipient] = useState<Recipient>({
+    id: 'recip-1',
+    document_id: 'doc-001',
+    name: 'Johan Van Der Merwe',
+    email: 'johan@example.co.za',
+    role: 'signer',
+    order_index: 0,
+    status: 'opened',
+    auth_method: 'none',
+    created_at: new Date().toISOString(),
+  });
+
+  const [fields, setFields] = useState<DocumentField[]>([
+    {
+      id: 'f-1',
+      document_id: 'doc-001',
+      recipient_id: 'recip-1',
+      type: 'full_name',
+      page: 1,
+      x_pct: 15,
+      y_pct: 35,
+      width_pct: 32,
+      height_pct: 3.2,
+      required: true,
+      label: 'Full Legal Name',
+      value: 'Johan Van Der Merwe',
+      read_only: false,
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: 'f-2',
+      document_id: 'doc-001',
+      recipient_id: 'recip-1',
+      type: 'sa_id',
+      page: 1,
+      x_pct: 55,
+      y_pct: 35,
+      width_pct: 28,
+      height_pct: 3.2,
+      required: true,
+      label: '13-Digit SA ID',
+      value: '',
+      read_only: false,
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: 'f-3',
+      document_id: 'doc-001',
+      recipient_id: 'recip-1',
+      type: 'signature',
+      page: 2,
+      x_pct: 15,
+      y_pct: 70,
+      width_pct: 26,
+      height_pct: 5.5,
+      required: true,
+      label: 'Client Signature',
+      value: '',
+      read_only: false,
+      created_at: new Date().toISOString(),
+    },
+  ]);
+
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({
+    'f-1': 'Johan Van Der Merwe',
+    'f-2': '9001015009086',
+    'f-3': '',
+  });
+
+  const [activePage, setActivePage] = useState(1);
+
+  // Field Navigation Calculations
+  const recipientFields = fields.filter((f) => f.recipient_id === recipient.id);
+  const completedFieldsCount = recipientFields.filter(
+    (f) => fieldValues[f.id] && fieldValues[f.id].trim() !== ''
+  ).length;
+
+  const handleFieldValueChange = (fieldId: string, val: string) => {
+    setFieldValues((prev) => ({ ...prev, [fieldId]: val }));
+  };
+
+  const handleOpenSignatureModal = (fieldId: string) => {
+    setActiveSigFieldId(fieldId);
+    // If we already have a saved signature in the session, automatically apply it
+    if (savedSignatureData) {
+      handleFieldValueChange(fieldId, savedSignatureData);
+    } else {
+      setIsSigModalOpen(true);
+    }
+  };
+
+  const handleSaveSignature = (sigData: string, method: SignatureMethod, font?: string) => {
+    setSavedSignatureData(sigData);
+    if (activeSigFieldId) {
+      handleFieldValueChange(activeSigFieldId, sigData);
+    }
+  };
+
+  const handleFinishSigning = async () => {
+    // Trigger celebration confetti
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 },
+    });
+    setIsCompleted(true);
+  };
+
+  const handleConfirmDecline = async (reason: string) => {
+    setDeclineReason(reason);
+    setIsDeclined(true);
+  };
+
+  const handleNextField = () => {
+    if (currentFieldIndex < recipientFields.length - 1) {
+      const nextIndex = currentFieldIndex + 1;
+      setCurrentFieldIndex(nextIndex);
+      setActivePage(recipientFields[nextIndex].page);
+    }
+  };
+
+  const handlePrevField = () => {
+    if (currentFieldIndex > 0) {
+      const prevIndex = currentFieldIndex - 1;
+      setCurrentFieldIndex(prevIndex);
+      setActivePage(recipientFields[prevIndex].page);
+    }
+  };
+
+  // 1. If document was declined
+  if (isDeclined) {
+    return (
+      <div className="min-h-screen bg-[#090d16] text-white flex items-center justify-center p-4">
+        <Card className="max-w-md w-full bg-slate-900 border-slate-800 text-center p-6 shadow-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 mx-auto mb-4">
+            <XCircle className="w-8 h-8" />
+          </div>
+          <CardTitle className="text-xl font-bold text-white">Document Signing Declined</CardTitle>
+          <p className="text-xs text-slate-400 mt-2">
+            You have declined to sign <strong>"{document.title}"</strong>. The sender has been notified with your reason.
+          </p>
+          <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300 my-4 text-left">
+            <strong className="text-slate-400 block mb-1">Reason Recorded:</strong>
+            "{declineReason}"
+          </div>
+          <p className="text-[11px] text-slate-500">You can safely close this browser window.</p>
+        </Card>
+      </div>
+    );
+  }
+
+  // 2. If document signing finished
+  if (isCompleted) {
+    return (
+      <div className="min-h-screen bg-[#090d16] text-white flex items-center justify-center p-4">
+        <Card className="max-w-lg w-full bg-slate-900 border-slate-800 text-center p-8 shadow-2xl space-y-6">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
+            <CheckCircle2 className="w-10 h-10" />
+          </div>
+          <div>
+            <CardTitle className="text-2xl font-bold text-white">Document Successfully Signed!</CardTitle>
+            <p className="text-xs text-slate-400 mt-2">
+              Thank you, <strong>{recipient.name}</strong>. Your electronic signature is legally valid under the South African ECTA 25 of 2002.
+            </p>
+          </div>
+
+          <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-left space-y-2 text-xs">
+            <div className="flex justify-between text-slate-300">
+              <span className="text-slate-400">Document Title:</span>
+              <span className="font-semibold text-right">{document.title}</span>
+            </div>
+            <div className="flex justify-between text-slate-300">
+              <span className="text-slate-400">Signatory Email:</span>
+              <span className="font-mono">{recipient.email}</span>
+            </div>
+            <div className="flex justify-between text-slate-300">
+              <span className="text-slate-400">Integrity Hash:</span>
+              <span className="font-mono text-[10px] text-emerald-400">SHA-256 Validated</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link href={`/verify/${document.id}`} target="_blank" className="flex-1">
+              <Button variant="outline" className="w-full text-xs border-slate-700">
+                <ShieldCheck className="w-4 h-4 mr-1.5 text-cyan-400" /> Verify Authenticity
+              </Button>
+            </Link>
+            <Button
+              variant="default"
+              onClick={() => alert('Downloading executed PDF with official ECTA Signature Certificate...')}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-xs font-bold"
+            >
+              <Download className="w-4 h-4 mr-1.5" /> Download Signed Copy
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col bg-[#090d16] text-slate-100 pb-24">
+      {/* Top Signer Header */}
+      <header className="h-16 border-b border-slate-800 bg-slate-950/80 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-30">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow">
+            🌕
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-white truncate max-w-xs sm:max-w-md">
+              {document.title}
+            </h2>
+            <span className="text-[10px] text-slate-400">
+              Issued by {document.sender_name}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsDeclineModalOpen(true)}
+            className="text-xs text-red-400 hover:text-red-300 hover:bg-red-950/30"
+          >
+            <XCircle className="w-3.5 h-3.5 mr-1" /> Decline to Sign
+          </Button>
+        </div>
+      </header>
+
+      {/* Main Document Body */}
+      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 flex flex-col items-center">
+        {/* Page Switcher */}
+        <div className="w-full max-w-[800px] flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 mb-4">
+          <div className="flex items-center gap-2 text-xs text-slate-300">
+            <span className="font-semibold text-white">{recipient.name}</span>
+            <Badge variant="default" className="text-[10px]">
+              Signer
+            </Badge>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 mr-1">Page:</span>
+            {[...Array(document.page_count)].map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setActivePage(i + 1)}
+                className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${
+                  activePage === i + 1
+                    ? 'bg-indigo-600 text-white shadow'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Interactive PDF Page */}
+        <InteractivePdfCanvas
+          pageNumber={activePage}
+          fields={fields}
+          recipients={[recipient]}
+          selectedFieldId={null}
+          onSelectField={() => {}}
+          onUpdateFieldPosition={() => {}}
+          onDeleteField={() => {}}
+          onConfigureField={() => {}}
+          isSignerMode={true}
+          fieldValues={fieldValues}
+          onFieldValueChange={handleFieldValueChange}
+          onOpenSignatureModal={handleOpenSignatureModal}
+        />
+      </main>
+
+      {/* Sticky Field Navigator */}
+      <FieldNavigator
+        currentFieldIndex={currentFieldIndex}
+        totalFieldsCount={recipientFields.length}
+        completedFieldsCount={completedFieldsCount}
+        onNextField={handleNextField}
+        onPrevField={handlePrevField}
+        onFinishSigning={handleFinishSigning}
+      />
+
+      {/* Mandatory ECTA Consent Gate Modal */}
+      <EctaConsentModal
+        isOpen={isConsentModalOpen && !consentAccepted}
+        documentTitle={document.title}
+        senderName={document.sender_name}
+        onAcceptConsent={() => {
+          setConsentAccepted(true);
+          setIsConsentModalOpen(false);
+        }}
+      />
+
+      {/* 3-Tab Signature Modal */}
+      <SignatureModal
+        isOpen={isSigModalOpen}
+        onClose={() => setIsSigModalOpen(false)}
+        onSaveSignature={handleSaveSignature}
+        defaultName={recipient.name}
+      />
+
+      {/* Decline to Sign Modal */}
+      <DeclineModal
+        isOpen={isDeclineModalOpen}
+        onClose={() => setIsDeclineModalOpen(false)}
+        onConfirmDecline={handleConfirmDecline}
+        documentTitle={document.title}
+      />
+    </div>
+  );
+}
