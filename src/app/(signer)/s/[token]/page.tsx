@@ -112,6 +112,15 @@ export default function SignerPortalPage() {
                 for (let i = 0; i < len; i++) {
                   bytes[i] = binaryString.charCodeAt(i);
                 }
+
+                // Immediately read exact page count using pdf-lib
+                try {
+                  const { PDFDocument } = await import('pdf-lib');
+                  const pdfDoc = await PDFDocument.load(bytes.buffer, { ignoreEncryption: true });
+                  const exactPageCount = pdfDoc.getPageCount();
+                  setDocument((prev) => ({ ...prev, page_count: exactPageCount }));
+                } catch (cErr) {}
+
                 const pages = await renderPdfPagesFromBuffer(bytes.buffer);
                 setRenderedPages(pages);
                 setDocument((prev) => ({ ...prev, page_count: Math.max(prev.page_count, pages.length) }));
@@ -211,7 +220,7 @@ export default function SignerPortalPage() {
             signatureData,
           }));
 
-        await fetch(`/api/sign/${token}`, {
+        const res = await fetch(`/api/sign/${token}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -221,6 +230,13 @@ export default function SignerPortalPage() {
             signatures,
           }),
         });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          alert(errData.error || 'Failed to submit signatures. Please try again.');
+          setIsSubmitting(false);
+          return;
+        }
       }
 
       // Trigger celebration confetti
@@ -486,6 +502,48 @@ export default function SignerPortalPage() {
           onFieldValueChange={handleFieldValueChange}
           onOpenSignatureModal={handleOpenSignatureModal}
         />
+
+        {/* Bottom Page Navigation Controls */}
+        <div className="w-full max-w-[800px] flex items-center justify-between bg-slate-900/80 border border-slate-800 rounded-xl px-4 py-2.5 mt-2 mb-8 shadow-md">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setActivePage((prev) => Math.max(1, prev - 1))}
+            disabled={activePage <= 1}
+            className="h-8 px-3 text-xs border-slate-700 bg-slate-950 text-slate-300 hover:text-white"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" /> Previous Page
+          </Button>
+
+          <div className="flex items-center gap-1.5">
+            {[...Array(totalPages)].map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setActivePage(i + 1)}
+                className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                  activePage === i + 1
+                    ? 'bg-indigo-600 text-white shadow ring-2 ring-indigo-400/50'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setActivePage((prev) => Math.min(totalPages, prev + 1))}
+            disabled={activePage >= totalPages}
+            className="h-8 px-3 text-xs border-slate-700 bg-slate-950 text-slate-300 hover:text-white"
+          >
+            Next Page <ChevronRight className="w-4 h-4 ml-1" />
+          </Button>
+        </div>
       </main>
 
       {/* Sticky Field Navigator */}

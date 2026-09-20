@@ -261,7 +261,13 @@ export async function POST(req: NextRequest) {
 
     // 3. Insert Fields with accurate Coordinates and Strict Arial Font Metadata
     for (const f of validated.fields) {
-      const mappedRecipId = f.recipientIndex !== null ? recipientIdMap.get(f.recipientIndex) || null : null;
+      let mappedRecipId: string | null = null;
+      if (f.recipientIndex !== null && f.recipientIndex !== undefined && f.recipientIndex >= 0) {
+        mappedRecipId = recipientIdMap.get(f.recipientIndex) || null;
+      }
+      if (!mappedRecipId && (f.type === 'signature' || f.type === 'initials') && insertedRecipients.length > 0) {
+        mappedRecipId = insertedRecipients[0].id;
+      }
 
       await dbQuery(
         `INSERT INTO fields (

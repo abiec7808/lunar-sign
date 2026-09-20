@@ -38,7 +38,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // 4. Fetch Signatures
     const sigsRes = await dbQuery(
-      `SELECT * FROM signatures WHERE document_id = $1`,
+      `SELECT s.* FROM signatures s JOIN fields f ON s.field_id = f.id WHERE f.document_id = $1`,
       [doc.id]
     );
 

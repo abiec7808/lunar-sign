@@ -193,18 +193,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     for (const sig of validated.signatures) {
       await dbQuery(
         `INSERT INTO signatures (
-          document_id, recipient_id, field_id, signature_type, signature_data,
-          typed_font, ip_address, user_agent
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          field_id, recipient_id, method, signature_data,
+          font_family, ip_address, user_agent
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (field_id) DO UPDATE SET
           signature_data = EXCLUDED.signature_data,
-          typed_font = EXCLUDED.typed_font,
+          font_family = EXCLUDED.font_family,
           ip_address = EXCLUDED.ip_address,
           user_agent = EXCLUDED.user_agent`,
         [
-          recipient.doc_id,
-          recipient.id,
           sig.fieldId,
+          recipient.id,
           sig.method,
           sig.signatureData,
           sig.fontFamily || null,

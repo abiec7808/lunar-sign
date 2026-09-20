@@ -49,7 +49,7 @@ export async function GET(
           const tplCheck = await dbQuery(
             `SELECT pdf_base64 FROM templates
              WHERE (org_id = $1 OR org_id = '11111111-1111-1111-1111-111111111111')
-               AND (LOWER(name) = LOWER($2) OR LOWER(name) LIKE '%' || LOWER($2) || '%')
+               AND (LOWER(name) = LOWER($2) OR LOWER(name) LIKE '%' || LOWER($2) || '%' OR LOWER($2) LIKE '%' || LOWER(name) || '%')
                AND pdf_base64 IS NOT NULL
              LIMIT 1`,
             [doc.org_id || '11111111-1111-1111-1111-111111111111', doc.title]
@@ -90,7 +90,7 @@ export async function GET(
     if (doc) {
       const [fieldsRes, sigsRes, recipsRes, auditRes] = await Promise.all([
         dbQuery(`SELECT * FROM fields WHERE document_id = $1 ORDER BY page ASC, y_pct ASC`, [doc.id]),
-        dbQuery(`SELECT * FROM signatures WHERE document_id = $1`, [doc.id]),
+        dbQuery(`SELECT s.* FROM signatures s JOIN fields f ON s.field_id = f.id WHERE f.document_id = $1`, [doc.id]),
         dbQuery(`SELECT * FROM recipients WHERE document_id = $1 ORDER BY order_index ASC`, [doc.id]),
         dbQuery(`SELECT * FROM audit_events WHERE document_id = $1 ORDER BY created_at ASC`, [doc.id]),
       ]);

@@ -178,25 +178,16 @@ function NewDocumentContent() {
               setRenderedPages(pages);
             }
 
-            if (defs) {
-              if (Array.isArray(defs.fields) && defs.fields.length > 0) {
-                setFields(defs.fields);
-              } else if (Array.isArray(defs) && defs.length > 0) {
-                setFields(defs);
-              }
-            }
-
             let rRoles: any = tpl.recipient_roles;
             if (typeof rRoles === 'string') {
               try { rRoles = JSON.parse(rRoles); } catch (e) {}
             }
-            if (Array.isArray(rRoles) && rRoles.length > 0) {
-              setRecipients(
-                rRoles.map((r: any, idx: number) => ({
+            const newRecipients: Recipient[] = Array.isArray(rRoles) && rRoles.length > 0
+              ? rRoles.map((r: any, idx: number) => ({
                   id: r.id || `recip-${idx + 1}`,
                   document_id: 'live-doc',
-                  name: '', // Blank signatory name as every signer is different
-                  email: '', // Blank signatory email
+                  name: '',
+                  email: '',
                   phone: '',
                   role: r.role || 'signer',
                   order_index: idx,
@@ -205,7 +196,57 @@ function NewDocumentContent() {
                   color: getRecipientColor(idx),
                   created_at: new Date().toISOString(),
                 }))
-              );
+              : [
+                  {
+                    id: 'recip-1',
+                    document_id: 'live-doc',
+                    name: '',
+                    email: '',
+                    phone: '',
+                    role: 'signer',
+                    order_index: 0,
+                    status: 'pending',
+                    auth_method: 'none',
+                    color: getRecipientColor(0),
+                    created_at: new Date().toISOString(),
+                  },
+                ];
+
+            setRecipients(newRecipients);
+
+            if (defs) {
+              const rawFields = Array.isArray(defs.fields) ? defs.fields : Array.isArray(defs) ? defs : [];
+              if (rawFields.length > 0) {
+                const mappedFields = rawFields.map((f: any, fIdx: number) => {
+                  let targetRecipId: string | null = null;
+                  if (f.recipientIndex !== undefined && f.recipientIndex !== null && f.recipientIndex >= 0) {
+                    targetRecipId = newRecipients[f.recipientIndex]?.id || null;
+                  } else if (f.recipient_id) {
+                    const matchedRecip = newRecipients.find((nr) => nr.id === f.recipient_id);
+                    if (matchedRecip) {
+                      targetRecipId = matchedRecip.id;
+                    } else {
+                      const oldIndex = Array.isArray(rRoles)
+                        ? rRoles.findIndex((oldR: any) => oldR.id === f.recipient_id)
+                        : -1;
+                      if (oldIndex >= 0 && newRecipients[oldIndex]) {
+                        targetRecipId = newRecipients[oldIndex].id;
+                      } else if (f.type === 'signature' || f.type === 'initials') {
+                        targetRecipId = newRecipients[0]?.id || 'recip-1';
+                      }
+                    }
+                  } else if (f.type === 'signature' || f.type === 'initials') {
+                    targetRecipId = newRecipients[0]?.id || 'recip-1';
+                  }
+
+                  return {
+                    ...f,
+                    id: f.id || `f-${Date.now()}-${fIdx}`,
+                    recipient_id: targetRecipId,
+                  };
+                });
+                setFields(mappedFields);
+              }
             }
 
             setTemplateNotification(`Template "${tpl.name}" loaded successfully!`);
@@ -460,19 +501,29 @@ function NewDocumentContent() {
           authMethod: r.auth_method,
           orderIndex: i,
         })),
-        fields: fields.map((f) => ({
-          type: f.type,
-          page: f.page,
-          x_pct: Number(f.x_pct),
-          y_pct: Number(f.y_pct),
-          width_pct: Number(f.width_pct),
-          height_pct: Number(f.height_pct),
-          required: f.required,
-          label: f.label || f.type,
-          placeholder: f.placeholder || '',
-          value: f.value || f.default_value || undefined,
-          recipientIndex: f.recipient_id ? recipients.findIndex((r) => r.id === f.recipient_id) : null,
-        })),
+        fields: fields.map((f) => {
+          let rIndex: number | null = null;
+          if (f.recipient_id) {
+            const idx = recipients.findIndex((r) => r.id === f.recipient_id);
+            rIndex = idx >= 0 ? idx : null;
+          }
+          if (rIndex === null && (f.type === 'signature' || f.type === 'initials')) {
+            rIndex = 0; // Default signature to 1st signer if unassigned
+          }
+          return {
+            type: f.type,
+            page: Number(f.page) || 1,
+            x_pct: Number(f.x_pct),
+            y_pct: Number(f.y_pct),
+            width_pct: Number(f.width_pct),
+            height_pct: Number(f.height_pct),
+            required: f.required,
+            label: f.label || f.type,
+            placeholder: f.placeholder || '',
+            value: f.value || f.default_value || undefined,
+            recipientIndex: rIndex,
+          };
+        }),
       };
 
       const response = await fetch('/api/documents', {
