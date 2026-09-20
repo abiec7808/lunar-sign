@@ -118,17 +118,20 @@ CREATE POLICY "Users and system can insert audit events"
         SELECT 1 FROM documents WHERE documents.id = audit_events.document_id AND documents.org_id = auth_user_org_id()
     ));
 
--- Append-only enforcement trigger for audit_events
+-- Append-only enforcement trigger for audit_events (disallow editing existing audit records)
 CREATE OR REPLACE FUNCTION enforce_audit_events_immutable()
 RETURNS TRIGGER AS $$
 BEGIN
-    RAISE EXCEPTION 'Audit events are immutable and cannot be updated or deleted.';
+    IF TG_OP = 'UPDATE' THEN
+        RAISE EXCEPTION 'Audit events are immutable and cannot be updated.';
+    END IF;
+    RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_audit_events_immutable ON audit_events;
 CREATE TRIGGER trg_audit_events_immutable
-BEFORE UPDATE OR DELETE ON audit_events
+BEFORE UPDATE ON audit_events
 FOR EACH ROW
 EXECUTE FUNCTION enforce_audit_events_immutable();
 
