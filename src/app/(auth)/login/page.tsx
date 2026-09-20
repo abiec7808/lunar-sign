@@ -12,8 +12,8 @@ import { checkRateLimit, recordFailedAttempt, resetRateLimit } from '@/lib/secur
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('admin@lunarposgeorge.co.za');
-  const [password, setPassword] = useState('Sharne2010!123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -74,7 +74,7 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
 
-          <form onSubmit={handleLoginSubmit}>
+          <form onSubmit={handleLoginSubmit} autoComplete="off">
             <CardContent className="space-y-4 pt-4">
               {error && (
                 <div className="p-3 bg-red-950/40 border border-red-900/60 rounded-xl flex items-center gap-2 text-xs text-red-300">
@@ -88,9 +88,10 @@ export default function LoginPage() {
                 <Input
                   type="email"
                   required
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@lunarposgeorge.co.za"
+                  placeholder="name@company.co.za"
                   className="mt-1 bg-slate-950 border-slate-700 text-xs"
                 />
               </div>
@@ -102,6 +103,7 @@ export default function LoginPage() {
                 <Input
                   type="password"
                   required
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
@@ -111,9 +113,9 @@ export default function LoginPage() {
 
               <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1">
                 <div className="text-indigo-300 font-semibold flex items-center gap-1">
-                  <Shield className="w-3.5 h-3.5 text-cyan-400" /> Live Database Authentication
+                  <Shield className="w-3.5 h-3.5 text-cyan-400" /> Live Multi-Tenant Database
                 </div>
-                <div>Connected to live Supabase Postgres & SMTP server.</div>
+                <div>Log in to access your business envelopes and templates.</div>
               </div>
             </CardContent>
 
