@@ -67,7 +67,6 @@ export class HybridEmailService implements IEmailService {
 
   async sendEmail(options: SendEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
     const { to, subject, reactElement, documentId, recipientId, templateName } = options;
-    const supabase = getAdminSupabaseClient();
 
     try {
       const html = await render(reactElement);
@@ -83,6 +82,7 @@ export class HybridEmailService implements IEmailService {
           html,
         });
         providerMessageId = info.messageId;
+        console.log(`[EmailService SMTP] Successfully dispatched "${templateName}" email to: ${to} (MessageId: ${info.messageId})`);
       } else if (this.resend) {
         // 2. Fallback to Resend API
         const response = await this.resend.emails.send({
@@ -97,21 +97,23 @@ export class HybridEmailService implements IEmailService {
           throw new Error(response.error.message);
         }
         providerMessageId = response.data?.id;
+        console.log(`[EmailService Resend] Successfully dispatched "${templateName}" email to: ${to}`);
       } else {
         providerMessageId = `mock_msg_${Date.now()}`;
         console.log(`[EmailService DEV] Sent "${templateName}" email to: ${to} (Subject: ${subject})`);
       }
 
-      // Log send in database
-      await supabase.from('email_log').insert({
-        document_id: documentId || null,
-        recipient_id: recipientId || null,
-        template: templateName,
-        to_email: to,
-        subject,
-        provider_message_id: providerMessageId,
-        status: 'sent',
-      });
+      // Log send directly in PostgreSQL database
+      try {
+        const { dbQuery } = await import('@/lib/db');
+        await dbQuery(
+          `INSERT INTO email_log (document_id, recipient_id, template, to_email, subject, provider_message_id, status)
+           VALUES ($1, $2, $3, $4, $5, $6, 'sent')`,
+          [documentId || null, recipientId || null, templateName, to, subject, providerMessageId || null]
+        );
+      } catch (dbErr) {
+        console.warn('Failed to insert email_log into database:', dbErr);
+      }
 
       return { success: true, messageId: providerMessageId };
     } catch (err: unknown) {
@@ -119,15 +121,12 @@ export class HybridEmailService implements IEmailService {
       console.error(`[EmailService Error] Failed to send email to ${to}:`, errorMsg);
 
       try {
-        await supabase.from('email_log').insert({
-          document_id: documentId || null,
-          recipient_id: recipientId || null,
-          template: templateName,
-          to_email: to,
-          subject,
-          status: 'failed',
-          error: errorMsg,
-        });
+        const { dbQuery } = await import('@/lib/db');
+        await dbQuery(
+          `INSERT INTO email_log (document_id, recipient_id, template, to_email, subject, status, error)
+           VALUES ($1, $2, $3, $4, $5, 'failed', $6)`,
+          [documentId || null, recipientId || null, templateName, to, subject, errorMsg]
+        );
       } catch (logErr) {
         console.error('Failed to log email error to database:', logErr);
       }

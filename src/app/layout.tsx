@@ -18,6 +18,11 @@ export const metadata: Metadata = {
     template: "%s | Lunar Sign",
   },
   description: "Secure, tamper-evident digital e-signature platform compliant with South African ECTA 25 of 2002 and POPIA.",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

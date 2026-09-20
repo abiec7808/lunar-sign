@@ -200,20 +200,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     }
 
     // 6. Send Signed Confirmation Email
-    emailService
-      .sendSignedConfirmation({
+    try {
+      await emailService.sendSignedConfirmation({
         to: recipient.email,
         recipientName: recipient.name,
         documentTitle: recipient.doc_title,
         signedAtFormatted: formatSaDateTime(nowIso),
         documentId: recipient.doc_id,
         recipientId: recipient.id,
-      })
-      .catch(console.error);
+      });
+    } catch (err) {
+      console.warn(`Failed to send signed confirmation email to ${recipient.email}:`, err);
+    }
 
     // 7. Check if all recipients have signed
     const allRecipsRes = await dbQuery(
-      `SELECT id, status FROM recipients WHERE document_id = $1`,
+      `SELECT id, name, email, order_index, status, token_expires_at FROM recipients WHERE document_id = $1 ORDER BY order_index ASC`,
       [recipient.doc_id]
     );
 
@@ -235,10 +237,74 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         ]
       );
 
+      // Fetch document creator email to notify
+      const docCreatorRes = await dbQuery(
+        `SELECT u.email as creator_email, u.full_name as creator_name
+         FROM documents d
+         LEFT JOIN users u ON d.created_by = u.id
+         WHERE d.id = $1 LIMIT 1`,
+        [recipient.doc_id]
+      );
+
+      const creatorEmail = docCreatorRes.rows[0]?.creator_email || 'admin@lunarposgeorge.co.za';
+      const creatorName = docCreatorRes.rows[0]?.creator_name || 'Lunar Administrator';
+
+      try {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunaposgeorge.co.za';
+        await emailService.sendDocumentCompleted({
+          to: creatorEmail,
+          recipientName: creatorName,
+          documentTitle: recipient.doc_title,
+          completedAtFormatted: formatSaDateTime(nowIso),
+          downloadUrl: `${appUrl}/api/documents/${recipient.doc_id}/download?type=pdf`,
+          verifyUrl: `${appUrl}/verify/${recipient.doc_id}`,
+          documentId: recipient.doc_id,
+        });
+      } catch (cErr) {
+        console.warn('Failed to send document completed email to creator:', cErr);
+      }
+
       dispatchWebhook('document.completed', recipient.doc_org_id, recipient.doc_id, {
         title: recipient.doc_title,
         completedAt: nowIso,
       }).catch(console.error);
+    } else {
+      // If sequential signing is enabled, notify the next recipient in order
+      const docOrderRes = await dbQuery(
+        `SELECT signing_order_enforced, message FROM documents WHERE id = $1 LIMIT 1`,
+        [recipient.doc_id]
+      );
+      if (docOrderRes.rows[0]?.signing_order_enforced) {
+        const nextRecip = pendingRecips[0];
+        if (nextRecip) {
+          const { generateSecureToken, hashSigningToken } = await import('@/lib/security/crypto');
+          const nextRawToken = generateSecureToken();
+          const nextTokenHash = hashSigningToken(nextRawToken);
+          await dbQuery(
+            `UPDATE recipients SET token_hash = $1 WHERE id = $2`,
+            [nextTokenHash, nextRecip.id]
+          );
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunaposgeorge.co.za';
+          const signingUrl = `${appUrl}/s/${nextRawToken}`;
+          const { formatSaDate } = await import('@/lib/dates');
+
+          try {
+            await emailService.sendSignatureRequest({
+              to: nextRecip.email,
+              recipientName: nextRecip.name,
+              senderName: recipient.name,
+              documentTitle: recipient.doc_title,
+              message: docOrderRes.rows[0].message,
+              signingUrl,
+              expiresAtFormatted: formatSaDate(nextRecip.token_expires_at),
+              documentId: recipient.doc_id,
+              recipientId: nextRecip.id,
+            });
+          } catch (nErr) {
+            console.error('Failed to notify next sequential signer:', nErr);
+          }
+        }
+      }
     }
 
     return NextResponse.json({

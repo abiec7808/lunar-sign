@@ -16,8 +16,8 @@ export interface DocumentCompletedEmailProps {
   recipientName: string;
   documentTitle: string;
   downloadUrl: string;
-  verifyUrl: string;
-  finalHash: string;
+  verifyUrl?: string;
+  finalHash?: string;
   completedAtFormatted: string;
   orgName?: string;
   primaryColor?: string;

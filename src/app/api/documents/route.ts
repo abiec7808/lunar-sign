@@ -62,6 +62,11 @@ export async function GET(req: NextRequest) {
       [orgId]
     );
 
+    // Asynchronously check for expiring documents and send 1-day reminders if needed
+    import('@/lib/email/reminders')
+      .then((m) => m.processExpiringDocumentReminders())
+      .catch((err) => console.warn('Background reminder check error:', err));
+
     return NextResponse.json({ documents: docsRes.rows });
   } catch (err: any) {
     console.error('Error fetching documents:', err);
@@ -133,15 +138,16 @@ export async function POST(req: NextRequest) {
     });
 
     const now = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+    // Signature link expires in strictly 5 days
+    const expiresAt = new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString();
 
     // 1. Insert Document into PostgreSQL
     const docRes = await dbQuery(
       `INSERT INTO documents (
         org_id, created_by, title, message, original_filename, original_mime_type,
         storage_path_original, storage_path_pdf, page_count, status, signing_order_enforced,
-        original_hash, expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'sent', $10, $11, $12)
+        original_hash, expires_at, reminder_interval_days
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'sent', $10, $11, $12, 1)
       RETURNING *`,
       [
         orgId,
@@ -229,8 +235,8 @@ export async function POST(req: NextRequest) {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunaposgeorge.co.za';
         const signingUrl = `${appUrl}/s/${rawToken}`;
 
-        emailService
-          .sendSignatureRequest({
+        try {
+          await emailService.sendSignatureRequest({
             to: r.email,
             recipientName: r.name,
             senderName,
@@ -240,8 +246,11 @@ export async function POST(req: NextRequest) {
             expiresAtFormatted: formatSaDate(tokenExpiresAt),
             documentId: doc.id,
             recipientId: recipId,
-          })
-          .catch((err) => console.error(`Error sending email to ${r.email}:`, err));
+          });
+          console.log(`[POST /api/documents] Dispatched signature request to ${r.email}`);
+        } catch (err) {
+          console.error(`Error sending email to ${r.email}:`, err);
+        }
       }
     }
 

@@ -141,6 +141,28 @@ export default function DocumentDetailPage() {
     }
   };
 
+  const handleSendReminder = async (recipientId?: string) => {
+    try {
+      setIsActionLoading(true);
+      const res = await fetch(`/api/documents/${docId}/remind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipientId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || 'Reminder email successfully sent!');
+      } else {
+        alert(data.error || 'Failed to send reminder.');
+      }
+    } catch (err) {
+      console.error('Failed to send reminder:', err);
+      alert('An error occurred while dispatching reminder.');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   const signedCount = recipients.filter((r) => r.status === 'signed').length;
   const totalCount = recipients.length;
   const isAllSigned = signedCount === totalCount && totalCount > 0;
@@ -172,6 +194,18 @@ export default function DocumentDetailPage() {
                 <Download className="w-3.5 h-3.5 mr-1.5" /> Download (PDF)
               </Button>
             </a>
+            {!isAllSigned && document.status !== 'voided' && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isActionLoading}
+                onClick={() => handleSendReminder()}
+                className="text-xs border-amber-500/40 text-amber-300 hover:bg-amber-950/40"
+                title="Send reminder email to all pending signers"
+              >
+                <Bell className="w-3.5 h-3.5 mr-1" /> Remind Signers
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -345,14 +379,24 @@ export default function DocumentDetailPage() {
                       )}
                     </div>
 
-                    {r.token && (
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="text-[11px] text-slate-400">Signer Direct Link:</span>
+                    <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
+                      {r.status !== 'signed' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleSendReminder(r.id)}
+                          disabled={isActionLoading}
+                          className="text-xs border-amber-500/30 text-amber-400 hover:bg-amber-950/30 h-7"
+                        >
+                          <Bell className="w-3 h-3 mr-1" /> Send Reminder
+                        </Button>
+                      )}
+                      {r.token && (
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => handleCopySigningLink(r.token, i)}
-                          className="text-xs text-indigo-400 hover:text-indigo-300 h-7"
+                          className="text-xs text-indigo-400 hover:text-indigo-300 h-7 ml-auto"
                         >
                           {copiedLinkIndex === i ? (
                             <span className="text-emerald-400 flex items-center gap-1">
@@ -364,8 +408,8 @@ export default function DocumentDetailPage() {
                             </span>
                           )}
                         </Button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ))}
