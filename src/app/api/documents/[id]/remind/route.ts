@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     // Verify document belongs to organization
     const docRes = await dbQuery(
-      `SELECT d.*, o.name as org_name
+      `SELECT d.*, o.name as org_name, o.custom_domain as org_custom_domain
        FROM documents d
        LEFT JOIN organisations o ON d.org_id = o.id
        WHERE d.id::text = $1 AND (d.org_id = $2 OR $3 = true)
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const doc = docRes.rows[0];
     const { getAppUrl } = await import('@/lib/url');
-    const appUrl = getAppUrl(req);
+    const appUrl = getAppUrl(req, doc.org_custom_domain);
     const expiresAtFormatted = formatSaDate(doc.expires_at || new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString());
 
     // Fetch target pending recipient(s)

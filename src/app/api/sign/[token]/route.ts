@@ -126,9 +126,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     const recipRes = await dbQuery(
       `SELECT r.*,
               d.id as doc_id, d.title as doc_title, d.org_id as doc_org_id, d.status as doc_status,
-              d.signing_order_enforced as doc_signing_order_enforced
+              d.signing_order_enforced as doc_signing_order_enforced,
+              o.custom_domain as org_custom_domain
        FROM recipients r
        JOIN documents d ON r.document_id = d.id
+       LEFT JOIN organisations o ON d.org_id = o.id
        WHERE r.token_hash = $1
        LIMIT 1`,
       [tokenHash]
@@ -301,7 +303,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
       try {
         const { getAppUrl } = await import('@/lib/url');
-        const appUrl = getAppUrl(req);
+        const appUrl = getAppUrl(req, recipient.org_custom_domain);
         await emailService.sendDocumentCompleted({
           to: creatorEmail,
           recipientName: creatorName,
@@ -336,7 +338,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
             [nextTokenHash, nextRecip.id]
           );
           const { getAppUrl } = await import('@/lib/url');
-          const appUrl = getAppUrl(req);
+          const appUrl = getAppUrl(req, recipient.org_custom_domain);
           const signingUrl = `${appUrl}/s/${nextRawToken}`;
           const { formatSaDate } = await import('@/lib/dates');
 

@@ -1,10 +1,27 @@
 /**
  * Robust Application Base URL resolver.
- * Handles production custom domain (sign.lunaposgeorge.co.za), Netlify deployments,
- * live incoming HTTP request headers, and filters out unconfigured/placeholder URLs like <your-site-name>.
+ * Handles production custom domain (sign.lunarposgeorge.co.za), organization custom domains,
+ * live incoming HTTP request headers, Netlify deployments, and environment variables.
  */
-export function getAppUrl(req?: Request | null): string {
-  // 1. If live incoming HTTP request is available, prioritize request origin
+export function getAppUrl(req?: Request | null, customDomain?: string | null): string {
+  // 1. If an explicit organization custom domain is configured, use it
+  if (customDomain && customDomain.trim().length > 3) {
+    const clean = customDomain
+      .trim()
+      .replace(/^https?:\/\//i, '')
+      .replace(/\/$/, '');
+    if (
+      !clean.includes('your-site-name') &&
+      !clean.includes('<') &&
+      !clean.includes('>') &&
+      !clean.includes('placeholder') &&
+      !clean.includes('undefined')
+    ) {
+      return `https://${clean}`;
+    }
+  }
+
+  // 2. If live incoming HTTP request is available, prioritize request origin
   if (req) {
     try {
       const proto = req.headers.get('x-forwarded-proto') || 'https';
@@ -23,7 +40,7 @@ export function getAppUrl(req?: Request | null): string {
     }
   }
 
-  // 2. Check explicit NEXT_PUBLIC_APP_URL
+  // 3. Check explicit NEXT_PUBLIC_APP_URL
   const envAppUrl = process.env.NEXT_PUBLIC_APP_URL;
   if (
     envAppUrl &&
@@ -34,7 +51,7 @@ export function getAppUrl(req?: Request | null): string {
     return envAppUrl.replace(/\/$/, '');
   }
 
-  // 3. Check Netlify automatic environment variables (URL or DEPLOY_PRIME_URL)
+  // 4. Check Netlify automatic environment variables (URL or DEPLOY_PRIME_URL)
   const netlifyUrl = process.env.URL || process.env.DEPLOY_PRIME_URL;
   if (
     netlifyUrl &&
@@ -45,6 +62,6 @@ export function getAppUrl(req?: Request | null): string {
     return netlifyUrl.replace(/\/$/, '');
   }
 
-  // 4. Default to official production domain
-  return 'https://sign.lunaposgeorge.co.za';
+  // 5. Default to official production domain
+  return 'https://sign.lunarposgeorge.co.za';
 }

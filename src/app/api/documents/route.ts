@@ -87,11 +87,12 @@ export async function POST(req: NextRequest) {
     const userId = auth?.userId || '22222222-2222-2222-2222-222222222222';
     const senderName = auth?.fullName || 'Lunar Administrator';
 
-    // Check organisation status and document limit (10 documents limit)
+    // Check organisation status, custom domain, and document limit (10 documents limit)
     const orgCheck = await dbQuery(
-      `SELECT status, max_documents FROM organisations WHERE id = $1 LIMIT 1`,
+      `SELECT status, max_documents, custom_domain FROM organisations WHERE id = $1 LIMIT 1`,
       [orgId]
     );
+    const orgCustomDomain = orgCheck.rows[0]?.custom_domain || null;
     if (orgCheck.rows.length > 0) {
       const orgInfo = orgCheck.rows[0];
       if (orgInfo.status === 'pending_approval' && !auth?.isSuperAdmin) {
@@ -233,7 +234,7 @@ export async function POST(req: NextRequest) {
       // Send Email Invitation to first recipient or all if non-sequential
       if (!validated.signingOrderEnforced || i === 0) {
         const { getAppUrl } = await import('@/lib/url');
-        const appUrl = getAppUrl(req);
+        const appUrl = getAppUrl(req, orgCustomDomain);
         const signingUrl = `${appUrl}/s/${rawToken}`;
 
         try {
