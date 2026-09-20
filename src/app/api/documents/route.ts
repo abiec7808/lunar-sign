@@ -310,3 +310,83 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: errorMsg }, { status: 400 });
   }
 }
+
+/**
+ * DELETE /api/documents - Bulk delete or void and remove documents
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { documentIds, action = 'delete', reason = 'Voided by administrator' } = body;
+
+    if (!Array.isArray(documentIds) || documentIds.length === 0) {
+      return NextResponse.json({ error: 'No document IDs provided' }, { status: 400 });
+    }
+
+    const auth = await getAuthenticatedUserWithOrg();
+    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
+    const isSuperAdmin = !!auth?.isSuperAdmin;
+    const senderName = auth?.fullName || 'Administrator';
+
+    if (action === 'delete' || action === 'void_remove') {
+      // If notifying signers on bulk void & remove
+      if (action === 'void_remove') {
+        try {
+          const recipsRes = await dbQuery(
+            `SELECT r.email, r.name, d.title, d.id as doc_id
+             FROM recipients r
+             JOIN documents d ON r.document_id = d.id
+             WHERE d.id::text = ANY($1) AND (d.org_id = $2 OR $3 = true) AND r.status != 'signed'`,
+            [documentIds, orgId, isSuperAdmin]
+          );
+          for (const r of recipsRes.rows) {
+            emailService
+              .sendVoided({
+                to: r.email,
+                recipientName: r.name,
+                senderName,
+                documentTitle: r.title,
+                voidReason: reason,
+                documentId: r.doc_id,
+              })
+              .catch((e) => console.warn('Bulk void email warning:', e));
+          }
+        } catch (nErr) {
+          console.warn('Failed sending void notifications during bulk deletion:', nErr);
+        }
+      }
+
+      const delRes = await dbQuery(
+        `DELETE FROM documents
+         WHERE id::text = ANY($1) AND (org_id = $2 OR $3 = true)
+         RETURNING id`,
+        [documentIds, orgId, isSuperAdmin]
+      );
+
+      return NextResponse.json({
+        success: true,
+        deletedCount: delRes.rowCount,
+        message: `Successfully removed ${delRes.rowCount} document envelope(s).`,
+      });
+    } else {
+      // Mark status as voided
+      const updateRes = await dbQuery(
+        `UPDATE documents
+         SET status = 'voided', voided_reason = $1, updated_at = NOW()
+         WHERE id::text = ANY($2) AND (org_id = $3 OR $4 = true)
+         RETURNING id, title`,
+        [reason, documentIds, orgId, isSuperAdmin]
+      );
+
+      return NextResponse.json({
+        success: true,
+        updatedCount: updateRes.rowCount,
+        message: `Successfully voided ${updateRes.rowCount} document envelope(s).`,
+      });
+    }
+  } catch (err: any) {
+    console.error('Error during bulk document action:', err);
+    return NextResponse.json({ error: err?.message || 'Failed to process bulk document action' }, { status: 500 });
+  }
+}
+

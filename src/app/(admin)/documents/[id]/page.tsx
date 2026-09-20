@@ -25,6 +25,7 @@ import {
   Lock,
   Users,
   Check,
+  Trash2,
 } from 'lucide-react';
 import { formatSaDateTime, formatSaDate } from '@/lib/dates';
 
@@ -36,6 +37,7 @@ export default function DocumentDetailPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'audit' | 'recipients'>('overview');
   const [copiedLinkIndex, setCopiedLinkIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isActionLoading, setIsActionLoading] = useState(false);
 
   const [document, setDocument] = useState<any>({
     id: docId,
@@ -90,6 +92,66 @@ export default function DocumentDetailPage() {
     setTimeout(() => setCopiedLinkIndex(null), 2000);
   };
 
+  const handleVoidEnvelope = async (removePermanently: boolean = true) => {
+    const promptMsg = removePermanently
+      ? `Are you sure you want to void and remove "${document.title}"? Signers will be notified and this envelope will be removed.`
+      : `Are you sure you want to void "${document.title}"?`;
+
+    if (!window.confirm(promptMsg)) return;
+
+    try {
+      setIsActionLoading(true);
+      const res = await fetch(`/api/documents/${docId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'void',
+          remove: removePermanently,
+          reason: 'Voided by business administrator.',
+        }),
+      });
+
+      if (res.ok) {
+        alert(removePermanently ? 'Document successfully voided and removed.' : 'Document voided.');
+        router.push('/documents');
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to void document');
+      }
+    } catch (err) {
+      console.error('Failed to void document:', err);
+      alert('An unexpected error occurred while voiding document.');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleDeleteEnvelope = async () => {
+    if (!window.confirm(`Are you sure you want to permanently delete "${document.title}"? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setIsActionLoading(true);
+      const res = await fetch(`/api/documents/${docId}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        alert('Document envelope deleted permanently.');
+        router.push('/documents');
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to delete document');
+      }
+    } catch (err) {
+      console.error('Failed to delete document:', err);
+      alert('An unexpected error occurred while deleting document.');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   const signedCount = recipients.filter((r) => r.status === 'signed').length;
   const totalCount = recipients.length;
   const isAllSigned = signedCount === totalCount && totalCount > 0;
@@ -101,7 +163,7 @@ export default function DocumentDetailPage() {
         title={document.title}
         subtitle={`Envelope ID: ${document.id} • ${document.page_count || 1} Pages • ${signedCount} of ${totalCount} Signatures Collected`}
         actionButton={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <Link href="/documents">
               <Button variant="outline" size="sm" className="text-xs">
                 <ArrowLeft className="w-3.5 h-3.5 mr-1" /> Back
@@ -118,12 +180,33 @@ export default function DocumentDetailPage() {
                 size="sm"
                 className="bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold shadow-lg shadow-indigo-600/25"
               >
-                <Download className="w-3.5 h-3.5 mr-1.5" /> Download Document (PDF)
+                <Download className="w-3.5 h-3.5 mr-1.5" /> Download (PDF)
               </Button>
             </a>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isActionLoading}
+              onClick={() => handleVoidEnvelope(true)}
+              className="text-xs border-amber-500/40 text-amber-400 hover:bg-amber-950/40"
+              title="Void and remove envelope"
+            >
+              <Ban className="w-3.5 h-3.5 mr-1" /> Void & Remove
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={isActionLoading}
+              onClick={handleDeleteEnvelope}
+              className="text-xs bg-red-600 hover:bg-red-500"
+              title="Permanently delete envelope"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
+            </Button>
           </div>
         }
       />
+
 
       <div className="p-6 sm:p-8 space-y-6 max-w-7xl w-full mx-auto">
         {/* Progress & Status Card */}

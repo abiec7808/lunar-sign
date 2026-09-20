@@ -69,6 +69,82 @@ export default function DocumentsListPage() {
     loadDocuments();
   }, []);
 
+  const [actionLoading, setActionLoading] = useState(false);
+  const [notification, setNotification] = useState<string | null>(null);
+
+  const handleBulkAction = async (action: 'void_remove' | 'delete') => {
+    const isVoid = action === 'void_remove';
+    const confirmMessage = isVoid
+      ? `Are you sure you want to void and remove ${selectedDocIds.length} selected document(s)? Signatories will be notified and links invalidated.`
+      : `Are you sure you want to permanently delete ${selectedDocIds.length} selected document(s)? This cannot be undone.`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      setActionLoading(true);
+      const res = await fetch('/api/documents', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentIds: selectedDocIds,
+          action: isVoid ? 'void_remove' : 'delete',
+          reason: 'Voided and removed by administrator via dashboard',
+        }),
+      });
+
+      if (res.ok) {
+        setDocuments((prev) => prev.filter((d) => !selectedDocIds.includes(d.id)));
+        setSelectedDocIds([]);
+        setNotification(
+          isVoid
+            ? `Successfully voided and removed selected documents.`
+            : `Successfully deleted selected documents.`
+        );
+        setTimeout(() => setNotification(null), 4000);
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to complete action');
+      }
+    } catch (err) {
+      console.error('Error during bulk action:', err);
+      alert('An unexpected error occurred.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSingleDelete = async (id: string, title: string, isVoid: boolean = false) => {
+    const confirmMessage = isVoid
+      ? `Are you sure you want to void and remove "${title}"?`
+      : `Are you sure you want to permanently delete "${title}"?`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      setActionLoading(true);
+      const res = await fetch(`/api/documents/${id}`, {
+        method: isVoid ? 'PATCH' : 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: isVoid ? JSON.stringify({ action: 'void', remove: true }) : undefined,
+      });
+
+      if (res.ok) {
+        setDocuments((prev) => prev.filter((d) => d.id !== id));
+        setSelectedDocIds((prev) => prev.filter((docId) => docId !== id));
+        setNotification(isVoid ? `Document "${title}" voided and removed.` : `Document "${title}" deleted.`);
+        setTimeout(() => setNotification(null), 4000);
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to remove document');
+      }
+    } catch (err) {
+      console.error('Error removing document:', err);
+      alert('An unexpected error occurred.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const filteredDocs = documents.filter((doc) => {
     const matchesSearch =
       doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -114,6 +190,15 @@ export default function DocumentsListPage() {
       />
 
       <div className="p-6 sm:p-8 space-y-6 max-w-7xl w-full mx-auto">
+        {notification && (
+          <div className="p-3 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs flex items-center justify-between animate-in fade-in-0">
+            <span>{notification}</span>
+            <button onClick={() => setNotification(null)} className="text-emerald-400 hover:text-emerald-200">
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Top Filter Bar */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
           <div className="relative flex-1 max-w-md">
@@ -145,19 +230,28 @@ export default function DocumentsListPage() {
 
         {/* Bulk Action Bar if items selected */}
         {selectedDocIds.length > 0 && (
-          <div className="p-3 bg-indigo-950/60 border border-indigo-500/30 rounded-xl flex items-center justify-between animate-in fade-in-0 duration-150">
+          <div className="p-3 bg-indigo-950/60 border border-indigo-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in-0 duration-150">
             <span className="text-xs text-indigo-200 font-semibold pl-2">
               {selectedDocIds.length} document(s) selected
             </span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="text-xs h-8">
-                <Bell className="w-3.5 h-3.5 mr-1" /> Send Reminders
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={actionLoading}
+                onClick={() => handleBulkAction('void_remove')}
+                className="text-xs h-8 bg-amber-600/80 hover:bg-amber-600 text-white border border-amber-500/40"
+              >
+                <Ban className="w-3.5 h-3.5 mr-1" /> Void & Remove Selected
               </Button>
-              <Button variant="outline" size="sm" className="text-xs h-8">
-                <Download className="w-3.5 h-3.5 mr-1" /> Download Selected
-              </Button>
-              <Button variant="destructive" size="sm" className="text-xs h-8">
-                <Ban className="w-3.5 h-3.5 mr-1" /> Void Selected
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={actionLoading}
+                onClick={() => handleBulkAction('delete')}
+                className="text-xs h-8 bg-red-600 hover:bg-red-500"
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete Permanently
               </Button>
             </div>
           </div>
@@ -265,12 +359,30 @@ export default function DocumentsListPage() {
                             {formatSaDate(doc.created_at)}
                           </td>
                           <td className="py-4 px-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-1.5">
                               <Link href={`/documents/${doc.id}`}>
-                                <Button variant="outline" size="sm" className="text-xs h-8">
+                                <Button variant="outline" size="sm" className="text-xs h-7 px-2.5">
                                   Manage <ExternalLink className="w-3 h-3 ml-1" />
                                 </Button>
                               </Link>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSingleDelete(doc.id, doc.title, true)}
+                                title="Void and remove envelope"
+                                className="text-xs h-7 w-7 p-0 text-amber-400 hover:text-amber-300 hover:bg-amber-950/40"
+                              >
+                                <Ban className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSingleDelete(doc.id, doc.title, false)}
+                                title="Permanently delete envelope"
+                                className="text-xs h-7 w-7 p-0 text-red-400 hover:text-red-300 hover:bg-red-950/40"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -292,3 +404,4 @@ export default function DocumentsListPage() {
     </div>
   );
 }
+
