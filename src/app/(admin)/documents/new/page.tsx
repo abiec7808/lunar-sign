@@ -74,14 +74,14 @@ export default function NewDocumentPage() {
     loadAddressBook();
   }, []);
 
-  // Recipients State
+  // Recipients State (Clean blank state ready for customer input or address book pick)
   const [recipients, setRecipients] = useState<Recipient[]>([
     {
       id: 'recip-1',
       document_id: 'live-doc',
-      name: 'Johan Van Der Merwe',
-      email: 'johan@example.co.za',
-      phone: '+27 82 123 4567',
+      name: '',
+      email: '',
+      phone: '',
       role: 'signer',
       order_index: 0,
       status: 'pending',
@@ -89,92 +89,18 @@ export default function NewDocumentPage() {
       color: getRecipientColor(0),
       created_at: new Date().toISOString(),
     },
-    {
-      id: 'recip-2',
-      document_id: 'live-doc',
-      name: 'Sarah Jenkins',
-      email: 'sarah@example.co.za',
-      phone: '+27 71 555 1234',
-      role: 'signer',
-      order_index: 1,
-      status: 'pending',
-      auth_method: 'none',
-      color: getRecipientColor(1),
-      created_at: new Date().toISOString(),
-    },
   ]);
 
-  // Fields State with compact, sleek default coordinates
+  // Fields State
   const [fields, setFields] = useState<DocumentField[]>([
     {
       id: 'f-1',
       document_id: 'live-doc',
       recipient_id: 'recip-1',
-      type: 'full_name',
-      page: 1,
-      x_pct: 35,
-      y_pct: 20,
-      width_pct: 32,
-      height_pct: 3.0,
-      required: true,
-      label: 'Client Full Name',
-      read_only: false,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'f-2',
-      document_id: 'live-doc',
-      recipient_id: 'recip-1',
-      type: 'sa_id',
-      page: 1,
-      x_pct: 42,
-      y_pct: 23.5,
-      width_pct: 28,
-      height_pct: 3.0,
-      required: true,
-      label: '13-Digit SA ID',
-      read_only: false,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'f-3',
-      document_id: 'live-doc',
-      recipient_id: 'recip-1',
-      type: 'sa_vat',
-      page: 1,
-      x_pct: 35,
-      y_pct: 27,
-      width_pct: 28,
-      height_pct: 3.0,
-      required: false,
-      label: 'SARS VAT Number',
-      read_only: false,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'f-4',
-      document_id: 'live-doc',
-      recipient_id: null, // Sender Pre-fill Field
-      type: 'currency',
-      page: 1,
-      x_pct: 38,
-      y_pct: 38.5,
-      width_pct: 22,
-      height_pct: 3.0,
-      required: true,
-      label: 'Monthly Fee (ZAR)',
-      value: '15 000,00',
-      read_only: false,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'f-5',
-      document_id: 'live-doc',
-      recipient_id: 'recip-1',
       type: 'signature',
-      page: 2,
-      x_pct: 8,
-      y_pct: 19,
+      page: 1,
+      x_pct: 15,
+      y_pct: 75,
       width_pct: 26,
       height_pct: 5.5,
       required: true,
@@ -183,45 +109,15 @@ export default function NewDocumentPage() {
       created_at: new Date().toISOString(),
     },
     {
-      id: 'f-6',
+      id: 'f-2',
       document_id: 'live-doc',
       recipient_id: 'recip-1',
       type: 'date_signed',
-      page: 2,
-      x_pct: 8,
-      y_pct: 26,
-      width_pct: 22,
-      height_pct: 3.0,
-      required: true,
-      label: 'Date Signed',
-      read_only: false,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'f-7',
-      document_id: 'live-doc',
-      recipient_id: 'recip-2',
-      type: 'signature',
-      page: 2,
+      page: 1,
       x_pct: 55,
-      y_pct: 19,
-      width_pct: 26,
-      height_pct: 5.5,
-      required: true,
-      label: 'Provider Signature',
-      read_only: false,
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'f-8',
-      document_id: 'live-doc',
-      recipient_id: 'recip-2',
-      type: 'date_signed',
-      page: 2,
-      x_pct: 55,
-      y_pct: 26,
+      y_pct: 75,
       width_pct: 22,
-      height_pct: 3.0,
+      height_pct: 3.5,
       required: true,
       label: 'Date Signed',
       read_only: false,
@@ -401,19 +297,26 @@ export default function NewDocumentPage() {
 
   // Live Send Flow directly to Supabase API
   const handleSendEnvelope = async () => {
+    const invalidRecip = recipients.find((r) => !r.email || !r.email.includes('@'));
+    if (invalidRecip) {
+      alert('Please provide a valid email address for all recipients in Step 2 before dispatching.');
+      setCurrentStep(2);
+      return;
+    }
+
     setIsSending(true);
     try {
       const payload = {
-        title: docTitle,
+        title: docTitle || 'Service Level Agreement',
         message: docMessage,
-        originalFilename: uploadedFileName,
+        originalFilename: uploadedFileName || 'agreement.pdf',
         mimeType: 'application/pdf',
         fileBase64: fileBase64,
         signingOrderEnforced,
         recipients: recipients.map((r, i) => ({
-          name: r.name || `Signer ${i + 1}`,
-          email: r.email || `signer${i + 1}@example.co.za`,
-          phone: r.phone || '',
+          name: r.name.trim() || r.email.trim(),
+          email: r.email.trim().toLowerCase(),
+          phone: r.phone ? r.phone.trim() : '',
           role: r.role,
           authMethod: r.auth_method,
           orderIndex: i,
@@ -428,6 +331,7 @@ export default function NewDocumentPage() {
           required: f.required,
           label: f.label || f.type,
           placeholder: f.placeholder || '',
+          value: f.value || undefined,
           recipientIndex: f.recipient_id ? recipients.findIndex((r) => r.id === f.recipient_id) : null,
         })),
       };
