@@ -15,7 +15,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     const recipRes = await dbQuery(
       `SELECT r.*,
               d.id as doc_id, d.title as doc_title, d.message as doc_message,
-              d.page_count as doc_page_count, d.status as doc_status, d.org_id as doc_org_id
+              d.page_count as doc_page_count, d.status as doc_status, d.org_id as doc_org_id,
+              d.signing_order_enforced as doc_signing_order_enforced
        FROM recipients r
        JOIN documents d ON r.document_id = d.id
        WHERE r.token_hash = $1
@@ -34,6 +35,27 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       return NextResponse.json({ error: 'This signing link has expired.' }, { status: 410 });
     }
 
+    // Check if sequential signing order is enforced and previous signer has not signed
+    let isWaitingForPreviousSigner = false;
+    let previousSignerName = '';
+    let previousSignerOrder = 1;
+
+    if (r.doc_signing_order_enforced && (r.order_index ?? 0) > 0) {
+      const precedingRes = await dbQuery(
+        `SELECT name, order_index, email FROM recipients
+         WHERE document_id = $1 AND order_index < $2 AND status != 'signed'
+         ORDER BY order_index ASC
+         LIMIT 1`,
+        [r.doc_id, r.order_index]
+      );
+
+      if (precedingRes.rows.length > 0) {
+        isWaitingForPreviousSigner = true;
+        previousSignerName = precedingRes.rows[0].name || precedingRes.rows[0].email;
+        previousSignerOrder = (precedingRes.rows[0].order_index ?? 0) + 1;
+      }
+    }
+
     // Mark recipient as opened if currently pending
     if (r.status === 'pending') {
       await dbQuery(
@@ -42,9 +64,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       );
     }
 
-    // Fetch document fields
+    // Fetch document fields from Postgres fields table
     const fieldsRes = await dbQuery(
-      `SELECT * FROM document_fields WHERE document_id = $1 ORDER BY page ASC, y_pct ASC`,
+      `SELECT * FROM fields WHERE document_id = $1 ORDER BY page ASC, y_pct ASC`,
       [r.doc_id]
     );
 
@@ -54,6 +76,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         name: r.name,
         email: r.email,
         role: r.role,
+        orderIndex: r.order_index,
         status: r.status,
         authMethod: r.auth_method,
         consentGivenAt: r.consent_given_at,
@@ -64,8 +87,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         message: r.doc_message,
         pageCount: r.doc_page_count,
         status: r.doc_status,
+        signingOrderEnforced: r.doc_signing_order_enforced,
       },
       fields: fieldsRes.rows,
+      isWaitingForPreviousSigner,
+      previousSignerName,
+      previousSignerOrder,
     });
   } catch (err: any) {
     console.error('Error fetching signing token session:', err);
@@ -98,7 +125,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     // 1. Look up recipient and document
     const recipRes = await dbQuery(
       `SELECT r.*,
-              d.id as doc_id, d.title as doc_title, d.org_id as doc_org_id, d.status as doc_status
+              d.id as doc_id, d.title as doc_title, d.org_id as doc_org_id, d.status as doc_status,
+              d.signing_order_enforced as doc_signing_order_enforced
        FROM recipients r
        JOIN documents d ON r.document_id = d.id
        WHERE r.token_hash = $1
@@ -111,6 +139,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     }
 
     const recipient = recipRes.rows[0];
+
+    // If sequential signing is enforced, verify that all previous signers have already signed
+    if (recipient.doc_signing_order_enforced && (recipient.order_index ?? 0) > 0) {
+      const precedingRes = await dbQuery(
+        `SELECT name, order_index, email FROM recipients
+         WHERE document_id = $1 AND order_index < $2 AND status != 'signed'
+         ORDER BY order_index ASC
+         LIMIT 1`,
+        [recipient.doc_id, recipient.order_index]
+      );
+
+      if (precedingRes.rows.length > 0) {
+        const prevSigner = precedingRes.rows[0];
+        return NextResponse.json(
+          {
+            error: `Sequential signing is enforced. Please wait for Signer #${(prevSigner.order_index ?? 0) + 1} (${prevSigner.name || prevSigner.email}) to sign first.`,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
     const userAgent = req.headers.get('user-agent') || 'Browser';
     const nowIso = new Date().toISOString();
@@ -127,10 +177,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       [nowIso, ip, userAgent, recipient.id]
     );
 
-    // 3. Save field values (like SA ID, names, VAT, etc.)
+    // 3. Save field values into PostgreSQL fields table
     for (const [fieldId, val] of Object.entries(validated.fieldValues)) {
       await dbQuery(
-        `UPDATE document_fields SET value = $1 WHERE id::text = $2 AND document_id = $3`,
+        `UPDATE fields SET value = $1, completed_at = NOW() WHERE id::text = $2 AND document_id = $3`,
         [val, fieldId, recipient.doc_id]
       );
     }

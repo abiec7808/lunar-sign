@@ -150,8 +150,51 @@ export function FieldRenderer({
     );
   }
 
+  // 2. In Signer Mode: Check if field is assigned to someone else or is a Sender prefilled field
+  if (isSignerMode && field.recipient_id !== recipient?.id) {
+    if (field.type === 'signature' || field.type === 'initials') {
+      if (signatureData || value) {
+        return (
+          <div className="w-full h-full flex items-center justify-center pointer-events-none">
+            {signatureData?.startsWith('data:image') || value?.startsWith('data:image') ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={signatureData || value} alt="Signature" className="max-h-full max-w-full object-contain" />
+            ) : (
+              <span className="font-dancing-script text-lg text-slate-800" style={{ fontSize: effectiveFontSize }}>
+                {signatureData || value}
+              </span>
+            )}
+          </div>
+        );
+      }
+      return (
+        <div className="w-full h-full rounded border border-dashed border-slate-300 bg-slate-100/60 flex items-center justify-center text-[10px] text-slate-400 font-sans pointer-events-none">
+          {field.label || 'Signer Placeholder'}
+        </div>
+      );
+    }
 
-  // 2. In Signer Mode: Interactive inputs with pure Arial font & adjusted font size
+    if (field.type === 'checkbox') {
+      const isChecked = value === 'true' || value === '1';
+      return (
+        <div className="w-full h-full rounded border border-slate-300 bg-slate-50 flex items-center justify-center pointer-events-none">
+          {isChecked && <span className="font-bold text-black" style={{ fontSize: effectiveFontSize }}>✓</span>}
+        </div>
+      );
+    }
+
+    // Standard text / currency / date / SA ID / SA VAT / dropdown - rendered cleanly on document
+    return (
+      <div
+        style={{ ...arialFontStyle, fontSize: effectiveFontSize, color: '#000000' }}
+        className="w-full h-full flex items-center px-1 font-semibold overflow-hidden text-black select-none pointer-events-none"
+      >
+        <span className="truncate">{value || field.value || ''}</span>
+      </div>
+    );
+  }
+
+  // 3. In Signer Mode: Interactive inputs for THIS active recipient
   switch (field.type) {
     case 'signature':
     case 'initials':

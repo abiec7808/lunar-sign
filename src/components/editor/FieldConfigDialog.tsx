@@ -36,6 +36,7 @@ export function FieldConfigDialog({
   const [placeholder, setPlaceholder] = useState('');
   const [recipientId, setRecipientId] = useState<string | null>(null);
   const [required, setRequired] = useState(true);
+  const [value, setValue] = useState('');
   const [defaultValue, setDefaultValue] = useState('');
   const [fontSize, setFontSize] = useState<string>('auto');
   const [widthPct, setWidthPct] = useState<number>(30);
@@ -47,6 +48,7 @@ export function FieldConfigDialog({
       setPlaceholder(field.placeholder || '');
       setRecipientId(field.recipient_id || null);
       setRequired(field.required);
+      setValue(field.value || field.default_value || '');
       setDefaultValue(field.default_value || '');
       setWidthPct(Number(field.width_pct) || 30);
       setHeightPct(Number(field.height_pct) || 3.5);
@@ -63,7 +65,8 @@ export function FieldConfigDialog({
       placeholder: placeholder.trim() || undefined,
       recipient_id: recipientId,
       required,
-      default_value: defaultValue.trim() || undefined,
+      value: value.trim() || undefined,
+      default_value: value.trim() || defaultValue.trim() || undefined,
       width_pct: widthPct,
       height_pct: heightPct,
       validation_rule: {
@@ -117,6 +120,24 @@ export function FieldConfigDialog({
               className="mt-1 bg-slate-950 border-slate-700 text-xs"
             />
           </div>
+
+          {/* Pre-filled Text / Value */}
+          {field.type !== 'signature' && field.type !== 'initials' && (
+            <div>
+              <Label className="text-slate-300">Pre-filled Text / Value (Sender Input)</Label>
+              <Input
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder="Enter prefilled text (e.g. R 15,000 / Contract Date / Terms)..."
+                className="mt-1 bg-slate-950 border-slate-700 text-xs text-white"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">
+                {recipientId === null || !recipientId
+                  ? 'This text will be permanently stamped on the document before signers receive it.'
+                  : 'Default text pre-populated for this signatory to review or complete.'}
+              </span>
+            </div>
+          )}
 
           {/* Font & Sizing Options */}
           <div className="grid grid-cols-3 gap-2">

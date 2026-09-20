@@ -454,7 +454,7 @@ function NewDocumentContent() {
           required: f.required,
           label: f.label || f.type,
           placeholder: f.placeholder || '',
-          value: f.value || undefined,
+          value: f.value || f.default_value || undefined,
           recipientIndex: f.recipient_id ? recipients.findIndex((r) => r.id === f.recipient_id) : null,
         })),
       };
@@ -664,6 +664,12 @@ function NewDocumentContent() {
               <div className="space-y-3">
                 {recipients.map((recip, index) => {
                   const theme = getRecipientTheme(recip.color || index);
+                  const orderLabel = signingOrderEnforced
+                    ? index === 0
+                      ? 'Signs 1st (Initial Invitation)'
+                      : `Signs #${index + 1} (After Signer ${index})`
+                    : `Signer #${index + 1} (Parallel)`;
+
                   return (
                     <div
                       key={recip.id}
@@ -677,8 +683,9 @@ function NewDocumentContent() {
                         >
                           #{index + 1}
                         </div>
-                        <div className="hidden lg:block text-[11px] font-semibold text-slate-400">
-                          {theme.name}
+                        <div className="flex flex-col">
+                          <span className="text-[11px] font-semibold text-slate-300">{theme.name}</span>
+                          <span className="text-[10px] text-cyan-400 font-mono">{orderLabel}</span>
                         </div>
                       </div>
 
@@ -735,7 +742,7 @@ function NewDocumentContent() {
         </div>
       )}
 
-      {/* STEP 3: INTERACTIVE FIELD PLACEMENT WITH VISIBLE PDF CANVAS */}
+      {/* STEP 3: INTERACTIVE FIELD PLACEMENT */}
       {currentStep === 3 && (
         <div className="flex-1 flex overflow-hidden">
           {/* Left Toolbox */}
@@ -761,7 +768,7 @@ function NewDocumentContent() {
                   }`}
                 >
                   <span className="w-2 h-2 rounded-full bg-slate-400" />
-                  <span>Sender</span>
+                  <span>Sender (Pre-fill)</span>
                 </button>
                 {recipients.map((r, i) => {
                   const isSelected = selectedRecipientId === r.id;
@@ -830,49 +837,105 @@ function NewDocumentContent() {
 
       {/* STEP 4: SENDER PRE-FILL & REVIEW */}
       {currentStep === 4 && (
-        <div className="max-w-3xl w-full mx-auto p-8 space-y-6">
+        <div className="max-w-4xl w-full mx-auto p-8 space-y-6">
           <Card className="bg-slate-900/70 border-slate-800">
             <CardHeader>
-              <CardTitle className="text-base text-white">4. Sender Pre-Fill Step ("Me First")</CardTitle>
-              <p className="text-xs text-slate-400">Fill in your sender fields before dispatching links to external signers.</p>
+              <CardTitle className="text-base text-white">4. Sender Pre-Fill & Envelope Review</CardTitle>
+              <p className="text-xs text-slate-400">
+                Fill in all prefilled contract sections before dispatching. Values entered here are permanently stamped onto the agreement.
+              </p>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {fields.filter((f) => f.recipient_id === null).length === 0 ? (
-                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400 text-center">
-                  No sender pre-fill fields designated. The document is ready to be dispatched directly to recipients.
+            <CardContent className="space-y-6">
+              {/* 1. Sender Designated Pre-Fill Fields */}
+              <div className="space-y-3">
+                <div className="text-xs font-bold text-slate-200 flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span>Sender Pre-Fill Items ({fields.filter((f) => f.recipient_id === null).length})</span>
+                  <span className="text-[10px] text-cyan-400 font-normal">Stamped in crisp Arial font</span>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {fields
-                    .filter((f) => f.recipient_id === null)
-                    .map((field) => (
-                      <div key={field.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-                        <Label className="text-slate-300 text-xs">{field.label || field.type.toUpperCase()}</Label>
-                        <Input
-                          value={field.value || ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setFields(fields.map((f) => (f.id === field.id ? { ...f, value: val } : f)));
-                          }}
-                          placeholder="Enter pre-fill value in Arial font..."
-                          style={{ fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif', color: '#000000', backgroundColor: '#ffffff' }}
-                          className="bg-white text-black font-semibold border-slate-300 text-xs shadow-sm placeholder:text-slate-400"
-                        />
-                      </div>
-                    ))}
-                </div>
-              )}
 
+                {fields.filter((f) => f.recipient_id === null).length === 0 ? (
+                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400 text-center">
+                    No sender pre-fill fields placed. To add text that you fill out before sending, place fields assigned to <strong>Sender (Pre-fill)</strong> in Step 3.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {fields
+                      .filter((f) => f.recipient_id === null)
+                      .map((field) => (
+                        <div key={field.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-slate-300 text-xs font-semibold">{field.label || field.type.toUpperCase()}</Label>
+                            <span className="text-[10px] text-slate-500 font-mono">Page {field.page}</span>
+                          </div>
+                          <Input
+                            value={field.value || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFields(fields.map((f) => (f.id === field.id ? { ...f, value: val } : f)));
+                            }}
+                            placeholder="Enter prefilled value..."
+                            style={{ fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif', color: '#000000', backgroundColor: '#ffffff' }}
+                            className="bg-white text-black font-semibold border-slate-300 text-xs shadow-sm placeholder:text-slate-400"
+                          />
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Signing Workflow Dispatch Overview */}
+              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
+                <div className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                  <span>Signer Execution Flow</span>
+                  <Badge variant="outline" className="text-[10px] font-mono">
+                    {signingOrderEnforced ? 'Sequential Signing' : 'Parallel Signing'}
+                  </Badge>
+                </div>
+
+                <div className="space-y-2">
+                  {recipients.map((r, i) => {
+                    const theme = getRecipientTheme(r.color || i);
+                    return (
+                      <div
+                        key={r.id}
+                        className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-xs"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px]"
+                            style={{ backgroundColor: theme.badgeBg, color: theme.badgeText }}
+                          >
+                            {i + 1}
+                          </span>
+                          <div>
+                            <span className="font-semibold text-white">{r.name || 'Unnamed Signer'}</span>
+                            <span className="text-slate-400 font-mono text-[11px] ml-2">({r.email || 'No email'})</span>
+                          </div>
+                        </div>
+
+                        <span className="text-[10px] font-medium text-cyan-400">
+                          {signingOrderEnforced
+                            ? i === 0
+                              ? 'Receives email on send'
+                              : `Receives email after Signer ${i}`
+                            : 'Receives email immediately'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 3. System & Compliance Highlights */}
               <div className="p-4 bg-indigo-950/30 border border-indigo-900/50 rounded-xl space-y-2 text-xs text-indigo-200">
                 <div className="font-bold text-white flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-cyan-400" /> Live Dispatch Ready
                 </div>
-                <ul className="list-disc pl-4 space-y-1 text-slate-300">
+                <ul className="list-disc pl-4 space-y-1 text-slate-300 text-[11px]">
                   <li>Total Signers: {recipients.length}</li>
-                  <li>Total Fillable & Signature Placeholders: {fields.length}</li>
-                  <li>Live Supabase Postgres Database: Connected</li>
-                  <li>Live SMTP Server: <code>mail.lunarposgeorge.co.za:465</code> (SSL/TLS)</li>
-                  <li>South African ECTA 25 of 2002 Compliance: Enforced</li>
+                  <li>Total Contract Placeholders: {fields.length}</li>
+                  <li>South African ECTA 25 of 2002 & POPIA Compliance: Enforced</li>
+                  <li>Digital Signature Certificates generated automatically upon completion</li>
                 </ul>
               </div>
             </CardContent>

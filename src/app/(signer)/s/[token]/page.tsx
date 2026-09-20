@@ -56,6 +56,7 @@ export default function SignerPortalPage() {
     page_count: 1,
     org_name: 'Lunar Sign',
     primary_color: '#6366f1',
+    signingOrderEnforced: false,
   });
 
   const [recipient, setRecipient] = useState<Recipient>({
@@ -74,6 +75,9 @@ export default function SignerPortalPage() {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [activePage, setActivePage] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isWaitingForPreviousSigner, setIsWaitingForPreviousSigner] = useState(false);
+  const [previousSignerName, setPreviousSignerName] = useState('');
+  const [previousSignerOrder, setPreviousSignerOrder] = useState(1);
 
   useEffect(() => {
     async function loadSignSession() {
@@ -90,10 +94,16 @@ export default function SignerPortalPage() {
               page_count: data.document.pageCount || 1,
               org_name: 'Lunar Sign',
               primary_color: '#6366f1',
+              signingOrderEnforced: !!data.document.signingOrderEnforced,
             });
           }
           if (data.recipient) {
             setRecipient(data.recipient);
+          }
+          if (data.isWaitingForPreviousSigner) {
+            setIsWaitingForPreviousSigner(true);
+            setPreviousSignerName(data.previousSignerName || 'Previous Signer');
+            setPreviousSignerOrder(data.previousSignerOrder || 1);
           }
           if (data.fields && data.fields.length > 0) {
             setFields(data.fields);
@@ -111,8 +121,8 @@ export default function SignerPortalPage() {
     loadSignSession();
   }, [token]);
 
-  // Field Navigation Calculations
-  const recipientFields = fields.filter((f) => f.recipient_id === recipient.id || f.recipient_id === null);
+  // Field Navigation Calculations - Only this signer's own placeholders
+  const recipientFields = fields.filter((f) => f.recipient_id === recipient.id);
   const completedFieldsCount = recipientFields.filter(
     (f) => fieldValues[f.id] && fieldValues[f.id].trim() !== ''
   ).length;
@@ -200,6 +210,47 @@ export default function SignerPortalPage() {
       setActivePage(recipientFields[prevIndex].page);
     }
   };
+
+  // 0. If sequential signing is enforced and previous signer has not signed
+  if (isWaitingForPreviousSigner) {
+    return (
+      <div className="min-h-screen bg-[#090d16] text-white flex items-center justify-center p-4">
+        <Card className="max-w-md w-full bg-slate-900 border-slate-800 text-center p-8 shadow-2xl space-y-5">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
+            <Lock className="w-7 h-7" />
+          </div>
+          <div>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-amber-400 font-bold block mb-1">
+              Sequential Signing Enforced
+            </span>
+            <CardTitle className="text-xl font-bold text-white">Waiting for Previous Signer</CardTitle>
+            <p className="text-xs text-slate-400 mt-2">
+              This document is configured with sequential signing order. Signer #{previousSignerOrder} (<strong>{previousSignerName}</strong>) must review and sign first before your turn.
+            </p>
+          </div>
+
+          <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-left space-y-2 text-xs">
+            <div className="flex justify-between text-slate-300">
+              <span className="text-slate-400">Document:</span>
+              <span className="font-semibold truncate max-w-[200px]">{document.title}</span>
+            </div>
+            <div className="flex justify-between text-slate-300">
+              <span className="text-slate-400">Your Turn:</span>
+              <span className="font-bold text-cyan-400">Signer #{(recipient.order_index ?? 0) + 1}</span>
+            </div>
+            <div className="flex justify-between text-slate-300">
+              <span className="text-slate-400">Your Email:</span>
+              <span className="font-mono text-slate-300">{recipient.email}</span>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-500">
+            You will automatically receive an email invitation at <strong>{recipient.email}</strong> as soon as the previous signatory completes their signature.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   // 1. If document was declined
   if (isDeclined) {
