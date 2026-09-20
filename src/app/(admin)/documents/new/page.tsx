@@ -155,14 +155,30 @@ function NewDocumentContent() {
               try { defs = JSON.parse(defs); } catch (e) {}
             }
 
-            if (defs) {
-              if (defs.fileBase64) {
-                setFileBase64(defs.fileBase64);
-                const buffer = Buffer.from(defs.fileBase64, 'base64');
+            const base64ToUse = tpl.pdf_base64 || defs?.fileBase64 || defs?.pdfBase64;
+
+            if (base64ToUse) {
+              setFileBase64(base64ToUse);
+              try {
+                const buffer = Buffer.from(base64ToUse, 'base64');
                 const arrayBuf = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
                 const pages = await renderPdfPagesFromBuffer(arrayBuf);
                 setRenderedPages(pages);
+              } catch (renderErr) {
+                console.warn('Failed to render template PDF base64:', renderErr);
+                const { buffer, base64 } = await createDefaultSamplePdf();
+                setFileBase64(base64);
+                const pages = await renderPdfPagesFromBuffer(buffer);
+                setRenderedPages(pages);
               }
+            } else {
+              const { buffer, base64 } = await createDefaultSamplePdf();
+              setFileBase64(base64);
+              const pages = await renderPdfPagesFromBuffer(buffer);
+              setRenderedPages(pages);
+            }
+
+            if (defs) {
               if (Array.isArray(defs.fields) && defs.fields.length > 0) {
                 setFields(defs.fields);
               } else if (Array.isArray(defs) && defs.length > 0) {

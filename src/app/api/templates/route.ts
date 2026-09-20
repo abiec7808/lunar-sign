@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
 
     const res = await dbQuery(
-      `SELECT id, name, description, storage_path_pdf, field_definitions, recipient_roles, usage_count, created_at, updated_at
+      `SELECT id, name, description, storage_path_pdf, pdf_base64, field_definitions, recipient_roles, usage_count, created_at, updated_at
        FROM templates
        WHERE org_id = $1
        ORDER BY created_at DESC`,
@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, description = '', fields = [], recipientRoles = [], fileBase64 = '', originalFilename = 'template.pdf' } = body;
+    const { name, description = '', fields = [], recipientRoles = [], fileBase64 = '', pdfBase64 = '', originalFilename = 'template.pdf' } = body;
+
+    const base64Content = fileBase64 || pdfBase64 || '';
 
     if (!name || name.trim() === '') {
       return NextResponse.json({ error: 'Template name is required' }, { status: 400 });
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest) {
 
     const payloadFields = {
       fields: Array.isArray(fields) ? fields.map((f: any) => ({ ...f, value: f.type === 'text' && (f.label?.toLowerCase() === 'signature') ? '' : f.value })) : [],
-      fileBase64,
+      fileBase64: base64Content,
       originalFilename,
     };
 
@@ -71,14 +73,16 @@ export async function POST(req: NextRequest) {
         `UPDATE templates
          SET description = $1,
              storage_path_pdf = COALESCE($2, storage_path_pdf),
-             field_definitions = $3,
-             recipient_roles = $4,
+             pdf_base64 = COALESCE($3, pdf_base64),
+             field_definitions = $4,
+             recipient_roles = $5,
              updated_at = NOW()
-         WHERE id = $5 AND org_id = $6
+         WHERE id = $6 AND org_id = $7
          RETURNING *`,
         [
           description.trim() || `Custom template for ${cleanName}`,
-          fileBase64 ? `templates/${Date.now()}_${originalFilename}` : null,
+          base64Content ? `templates/${Date.now()}_${originalFilename}` : null,
+          base64Content || null,
           JSON.stringify(payloadFields),
           JSON.stringify(sanitizedRoles),
           existing.rows[0].id,
@@ -89,8 +93,8 @@ export async function POST(req: NextRequest) {
     } else {
       // Insert new template
       const inserted = await dbQuery(
-        `INSERT INTO templates (org_id, created_by, name, description, storage_path_pdf, field_definitions, recipient_roles)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO templates (org_id, created_by, name, description, storage_path_pdf, pdf_base64, field_definitions, recipient_roles)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
         [
           orgId,
@@ -98,6 +102,7 @@ export async function POST(req: NextRequest) {
           cleanName,
           description.trim() || `Custom template for ${cleanName}`,
           `templates/${Date.now()}_${originalFilename}`,
+          base64Content || null,
           JSON.stringify(payloadFields),
           JSON.stringify(sanitizedRoles),
         ]

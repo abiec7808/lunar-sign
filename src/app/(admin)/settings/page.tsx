@@ -35,7 +35,7 @@ const PRESET_PALETTES = [
 ];
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'branding' | 'details' | 'email' | 'domain' | 'security'>('branding');
+  const [activeTab, setActiveTab] = useState<'branding' | 'details' | 'email' | 'security'>('branding');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -227,9 +227,6 @@ export default function SettingsPage() {
               </TabsTrigger>
               <TabsTrigger value="email" className="flex items-center gap-2 text-xs">
                 <Mail className="w-3.5 h-3.5" /> Email Notification Copy
-              </TabsTrigger>
-              <TabsTrigger value="domain" className="flex items-center gap-2 text-xs">
-                <Globe className="w-3.5 h-3.5" /> Custom Domain
               </TabsTrigger>
               <TabsTrigger value="security" className="flex items-center gap-2 text-xs">
                 <Shield className="w-3.5 h-3.5" /> Security & POPIA
@@ -523,48 +520,7 @@ export default function SettingsPage() {
               </Card>
             </TabsContent>
 
-            {/* 4. CUSTOM DOMAIN TAB */}
-            <TabsContent value="domain" className="space-y-6 pt-4">
-              <Card className="bg-slate-900/70 border-slate-800">
-                <CardHeader>
-                  <CardTitle className="text-base text-white">Custom Subdomain & DNS</CardTitle>
-                  <CardDescription className="text-xs text-slate-400">
-                    Serve signing links and verification portals on your own company domain.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 text-xs">
-                  <div>
-                    <Label className="text-slate-300 text-xs">Custom Signing Domain (Optional)</Label>
-                    <Input
-                      value={customDomain}
-                      onChange={(e) => setCustomDomain(e.target.value)}
-                      placeholder="e.g. sign.yourcompany.co.za"
-                      className="mt-1 bg-slate-950 border-slate-700 text-xs font-mono text-white"
-                    />
-                  </div>
-
-                  <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2.5">
-                    <div className="font-bold text-slate-200">DNS Setup Guide:</div>
-                    <p className="text-slate-400">
-                      Create a <strong>CNAME</strong> record pointing your subdomain to your deployment host.
-                    </p>
-                    <div className="grid grid-cols-3 gap-2 bg-slate-900 p-2.5 rounded-lg border border-slate-800 font-mono text-[11px]">
-                      <div>
-                        <span className="text-slate-500 block">Type:</span> CNAME
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block">Host:</span> sign
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block">Target:</span> sign.lunaposgeorge.co.za
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* 5. SECURITY & RETENTION TAB */}
+            {/* 4. SECURITY & RETENTION TAB */}
             <TabsContent value="security" className="space-y-6 pt-4">
               <Card className="bg-slate-900/70 border-slate-800">
                 <CardHeader>

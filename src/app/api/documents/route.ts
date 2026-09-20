@@ -301,16 +301,22 @@ export async function POST(req: NextRequest) {
           const genericRoles = [
             { role: 'signer', label: 'Signer 1', orderIndex: 0 },
           ];
+          const payloadFields = {
+            fields: genericFields,
+            fileBase64: pdfBase64ToStore,
+            originalFilename: validated.originalFilename,
+          };
           await dbQuery(
-            `INSERT INTO templates (org_id, created_by, name, description, storage_path_pdf, field_definitions, recipient_roles)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            `INSERT INTO templates (org_id, created_by, name, description, storage_path_pdf, pdf_base64, field_definitions, recipient_roles)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
             [
               orgId,
               userId,
               cleanTitle,
               `Template automatically saved from "${cleanTitle}"`,
               doc.storage_path_pdf,
-              JSON.stringify(genericFields),
+              pdfBase64ToStore,
+              JSON.stringify(payloadFields),
               JSON.stringify(genericRoles),
             ]
           );
