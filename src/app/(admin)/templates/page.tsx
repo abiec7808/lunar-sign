@@ -110,7 +110,10 @@ export default function TemplatesPage() {
               try {
                 const rDefs = typeof tpl.recipient_roles === 'string' ? JSON.parse(tpl.recipient_roles) : tpl.recipient_roles;
                 if (Array.isArray(rDefs) && rDefs.length > 0) {
-                  parsedRoles = rDefs.map((r: any) => r.name || r.role || 'Signer');
+                  parsedRoles = rDefs.map((r: any, idx: number) => {
+                    const role = r.role || 'Signer';
+                    return role.charAt(0).toUpperCase() + role.slice(1);
+                  });
                 }
               } catch (e) {}
 

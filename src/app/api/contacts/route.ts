@@ -79,6 +79,53 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// PUT /api/contacts - Update an existing contact
+export async function PUT(req: NextRequest) {
+  try {
+    const session = await getCurrentSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { id, name, email, phone, role } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Contact ID is required for updates' }, { status: 400 });
+    }
+    if (!name || name.trim().length < 2) {
+      return NextResponse.json({ error: 'Valid contact name is required' }, { status: 400 });
+    }
+    if (!email || !email.includes('@')) {
+      return NextResponse.json({ error: 'Valid email address is required' }, { status: 400 });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanRole = ['signer', 'approver', 'filler', 'viewer'].includes(role) ? role : 'signer';
+
+    const updated = await dbQuery(
+      `UPDATE contacts
+       SET name = $1, email = $2, phone = $3, role = $4, updated_at = NOW()
+       WHERE id = $5 AND org_id = $6
+       RETURNING *`,
+      [name.trim(), cleanEmail, phone?.trim() || null, cleanRole, id, session.orgId]
+    );
+
+    if (updated.rows.length === 0) {
+      return NextResponse.json({ error: 'Contact not found or access denied' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      contact: updated.rows[0],
+      message: `Contact "${name.trim()}" updated successfully.`,
+    });
+  } catch (err: any) {
+    console.error('Error updating contact:', err);
+    return NextResponse.json({ error: err?.message || 'Failed to update contact' }, { status: 400 });
+  }
+}
+
 // DELETE /api/contacts - Delete a contact
 export async function DELETE(req: NextRequest) {
   try {

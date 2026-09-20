@@ -119,6 +119,39 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const doc = checkRes.rows[0];
 
+    // Handle Archive / Unarchive actions
+    if (action === 'archive') {
+      await dbQuery(
+        `UPDATE documents SET is_archived = true, archived_at = NOW(), updated_at = NOW() WHERE id::text = $1`,
+        [id]
+      );
+      await dbQuery(
+        `INSERT INTO audit_events (document_id, actor_type, event_type, description)
+         VALUES ($1, 'admin', 'document.archived', $2)`,
+        [doc.id, `Document moved to historical archives by ${senderName}.`]
+      );
+      return NextResponse.json({
+        success: true,
+        message: `Document "${doc.title}" was archived for history and safekeeping.`,
+      });
+    }
+
+    if (action === 'unarchive') {
+      await dbQuery(
+        `UPDATE documents SET is_archived = false, archived_at = NULL, updated_at = NOW() WHERE id::text = $1`,
+        [id]
+      );
+      await dbQuery(
+        `INSERT INTO audit_events (document_id, actor_type, event_type, description)
+         VALUES ($1, 'admin', 'document.unarchived', $2)`,
+        [doc.id, `Document restored from archives by ${senderName}.`]
+      );
+      return NextResponse.json({
+        success: true,
+        message: `Document "${doc.title}" restored from archives.`,
+      });
+    }
+
     // Fetch recipients to notify if voiding
     const recipsRes = await dbQuery(
       `SELECT email, name FROM recipients WHERE document_id = $1 AND status != 'signed'`,
@@ -129,16 +162,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (remove) {
       // Notify signers first before cascade deleting
       for (const r of recipsRes.rows) {
-        emailService
-          .sendVoided({
+        try {
+          await emailService.sendVoided({
             to: r.email,
             recipientName: r.name,
             senderName,
             documentTitle: doc.title,
             voidReason: reason,
             documentId: doc.id,
-          })
-          .catch((err) => console.warn(`Failed to send void email to ${r.email}:`, err));
+          });
+        } catch (err) {
+          console.warn(`Failed to send void email to ${r.email}:`, err);
+        }
       }
 
       await dbQuery(`DELETE FROM documents WHERE id::text = $1`, [id]);
@@ -163,16 +198,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Notify signers
     for (const r of recipsRes.rows) {
-      emailService
-        .sendVoided({
+      try {
+        await emailService.sendVoided({
           to: r.email,
           recipientName: r.name,
           senderName,
           documentTitle: doc.title,
           voidReason: reason,
           documentId: doc.id,
-        })
-        .catch((err) => console.warn(`Failed to send void email to ${r.email}:`, err));
+        });
+      } catch (err) {
+        console.warn(`Failed to send void email to ${r.email}:`, err);
+      }
     }
 
     return NextResponse.json({

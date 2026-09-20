@@ -23,6 +23,9 @@ import {
   Clock,
   ExternalLink,
   Inbox,
+  Archive,
+  ArchiveRestore,
+  ShieldCheck,
 } from 'lucide-react';
 import { formatSaDate } from '@/lib/dates';
 import { EctaExclusionsModal } from '@/components/admin/EctaExclusionsModal';
@@ -36,41 +39,104 @@ export default function DocumentsListPage() {
   const [documents, setDocuments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadDocuments() {
-      try {
-        const res = await fetch('/api/documents');
-        if (res.ok) {
-          const data = await res.json();
-          setDocuments(
-            (data.documents || []).map((d: any) => ({
-              id: d.id,
-              title: d.title,
-              recipients: [
-                {
-                  name: `${d.signed_recipients || 0} of ${d.total_recipients || 1} Signed`,
-                  email: '',
-                  status: d.status === 'completed' ? 'signed' : 'opened',
-                },
-              ],
-              status: d.status,
-              page_count: d.page_count || 1,
-              created_at: d.created_at,
-              completed_at: d.completed_at,
-            }))
-          );
-        }
-      } catch (err) {
-        console.error('Failed to load documents from database:', err);
-      } finally {
-        setIsLoading(false);
+  const loadDocuments = async () => {
+    try {
+      const res = await fetch('/api/documents');
+      if (res.ok) {
+        const data = await res.json();
+        setDocuments(
+          (data.documents || []).map((d: any) => ({
+            id: d.id,
+            title: d.title,
+            recipients: [
+              {
+                name: `${d.signed_recipients || 0} of ${d.total_recipients || 1} Signed`,
+                email: '',
+                status: d.status === 'completed' ? 'signed' : 'opened',
+              },
+            ],
+            status: d.status,
+            is_archived: !!d.is_archived,
+            archived_at: d.archived_at,
+            page_count: d.page_count || 1,
+            created_at: d.created_at,
+            completed_at: d.completed_at,
+          }))
+        );
       }
+    } catch (err) {
+      console.error('Failed to load documents from database:', err);
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadDocuments();
   }, []);
 
   const [actionLoading, setActionLoading] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
+
+  const handleArchiveToggle = async (id: string, title: string, archive: boolean) => {
+    try {
+      setActionLoading(true);
+      const res = await fetch(`/api/documents/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: archive ? 'archive' : 'unarchive' }),
+      });
+      if (res.ok) {
+        setNotification(
+          archive
+            ? `Document "${title}" archived for historical safekeeping.`
+            : `Document "${title}" restored from archives.`
+        );
+        setTimeout(() => setNotification(null), 4000);
+        await loadDocuments();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to update archive state');
+      }
+    } catch (err) {
+      console.error('Archive action error:', err);
+      alert('An unexpected error occurred.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleBulkArchive = async (archive: boolean) => {
+    try {
+      setActionLoading(true);
+      const res = await fetch('/api/documents', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentIds: selectedDocIds,
+          action: archive ? 'archive' : 'unarchive',
+        }),
+      });
+      if (res.ok) {
+        setNotification(
+          archive
+            ? `Successfully archived ${selectedDocIds.length} document(s).`
+            : `Successfully restored ${selectedDocIds.length} document(s).`
+        );
+        setSelectedDocIds([]);
+        setTimeout(() => setNotification(null), 4000);
+        await loadDocuments();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to archive documents');
+      }
+    } catch (err) {
+      console.error('Bulk archive error:', err);
+      alert('An unexpected error occurred.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const handleBulkAction = async (action: 'void_remove' | 'delete') => {
     const isVoid = action === 'void_remove';
@@ -154,8 +220,23 @@ export default function DocumentsListPage() {
             r.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             r.email.toLowerCase().includes(searchTerm.toLowerCase())
         ));
-    const matchesStatus = statusFilter === 'all' || doc.status === statusFilter;
-    return matchesSearch && matchesStatus;
+
+    if (statusFilter === 'archived') {
+      return matchesSearch && doc.is_archived === true;
+    }
+    if (doc.is_archived && statusFilter !== 'archived') {
+      return false; // Hide archived docs in active tabs
+    }
+    if (statusFilter === 'in_progress') {
+      return matchesSearch && (doc.status === 'sent' || doc.status === 'partially_signed');
+    }
+    if (statusFilter === 'completed') {
+      return matchesSearch && doc.status === 'completed';
+    }
+    if (statusFilter === 'voided') {
+      return matchesSearch && doc.status === 'voided';
+    }
+    return matchesSearch;
   });
 
   const toggleSelectAll = () => {
@@ -212,17 +293,23 @@ export default function DocumentsListPage() {
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-            {['all', 'draft', 'sent', 'partially_signed', 'completed', 'voided'].map((status) => (
+            {[
+              { id: 'all', label: 'All Active' },
+              { id: 'in_progress', label: 'In Progress' },
+              { id: 'completed', label: 'Completed & Signed' },
+              { id: 'archived', label: '📁 Archived History' },
+              { id: 'voided', label: 'Voided' },
+            ].map((tab) => (
               <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
+                key={tab.id}
+                onClick={() => setStatusFilter(tab.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all shrink-0 ${
-                  statusFilter === status
-                    ? 'bg-indigo-600 text-white shadow'
+                  statusFilter === tab.id
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                     : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
-                {status.replace('_', ' ')}
+                {tab.label}
               </button>
             ))}
           </div>
@@ -235,6 +322,27 @@ export default function DocumentsListPage() {
               {selectedDocIds.length} document(s) selected
             </span>
             <div className="flex items-center gap-2 flex-wrap">
+              {statusFilter === 'archived' ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={actionLoading}
+                  onClick={() => handleBulkArchive(false)}
+                  className="text-xs h-8 border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/40"
+                >
+                  <ArchiveRestore className="w-3.5 h-3.5 mr-1" /> Restore from Archive
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={actionLoading}
+                  onClick={() => handleBulkArchive(true)}
+                  className="text-xs h-8 border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/40"
+                >
+                  <Archive className="w-3.5 h-3.5 mr-1" /> Move to Archives
+                </Button>
+              )}
               <Button
                 variant="destructive"
                 size="sm"
@@ -291,7 +399,7 @@ export default function DocumentsListPage() {
                       </th>
                       <th className="py-3 px-4">Document Title</th>
                       <th className="py-3 px-4">Signatories</th>
-                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4">Status & Safekeeping</th>
                       <th className="py-3 px-4">Created Date</th>
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
@@ -300,7 +408,9 @@ export default function DocumentsListPage() {
                     {filteredDocs.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="py-8 text-center text-xs text-slate-500">
-                          No documents matched your filters.
+                          {statusFilter === 'archived'
+                            ? 'No archived documents yet. Completed envelopes can be archived for safekeeping.'
+                            : 'No documents matched your filters.'}
                         </td>
                       </tr>
                     ) : (
@@ -349,22 +459,69 @@ export default function DocumentsListPage() {
                             </div>
                           </td>
                           <td className="py-4 px-4">
-                            {doc.status === 'completed' && <Badge variant="success">Completed</Badge>}
-                            {doc.status === 'partially_signed' && <Badge variant="warning">Partially Signed</Badge>}
-                            {doc.status === 'sent' && <Badge variant="default">Sent</Badge>}
-                            {doc.status === 'draft' && <Badge variant="secondary">Draft</Badge>}
-                            {doc.status === 'voided' && <Badge variant="destructive">Voided</Badge>}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {doc.is_archived && (
+                                <Badge variant="outline" className="bg-slate-800 text-cyan-300 border-cyan-500/30 text-[10px]">
+                                  📁 Archived
+                                </Badge>
+                              )}
+                              {doc.status === 'completed' && <Badge variant="success">Completed</Badge>}
+                              {doc.status === 'partially_signed' && <Badge variant="warning">Partially Signed</Badge>}
+                              {doc.status === 'sent' && <Badge variant="default">Sent</Badge>}
+                              {doc.status === 'draft' && <Badge variant="secondary">Draft</Badge>}
+                              {doc.status === 'voided' && <Badge variant="destructive">Voided</Badge>}
+                            </div>
                           </td>
                           <td className="py-4 px-4 text-xs font-mono text-slate-400">
                             {formatSaDate(doc.created_at)}
                           </td>
                           <td className="py-4 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {(doc.status === 'completed' || doc.is_archived) && (
+                                <a
+                                  href={`/api/documents/${doc.id}/download`}
+                                  target="_blank"
+                                  download
+                                  title="Download Signed PDF for Safekeeping"
+                                >
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs h-7 px-2 border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/40"
+                                  >
+                                    <Download className="w-3.5 h-3.5 mr-1" /> Download
+                                  </Button>
+                                </a>
+                              )}
+
                               <Link href={`/documents/${doc.id}`}>
                                 <Button variant="outline" size="sm" className="text-xs h-7 px-2.5">
                                   Manage <ExternalLink className="w-3 h-3 ml-1" />
                                 </Button>
                               </Link>
+
+                              {doc.is_archived ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleArchiveToggle(doc.id, doc.title, false)}
+                                  title="Restore from Archives"
+                                  className="text-xs h-7 w-7 p-0 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-950/40"
+                                >
+                                  <ArchiveRestore className="w-3.5 h-3.5" />
+                                </Button>
+                              ) : doc.status === 'completed' ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleArchiveToggle(doc.id, doc.title, true)}
+                                  title="Archive signed document for history"
+                                  className="text-xs h-7 w-7 p-0 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/40"
+                                >
+                                  <Archive className="w-3.5 h-3.5" />
+                                </Button>
+                              ) : null}
+
                               <Button
                                 variant="ghost"
                                 size="sm"

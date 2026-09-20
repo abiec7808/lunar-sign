@@ -280,21 +280,39 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Auto-save template if requested
+    // 4. Auto-save template only if it does not already exist
     if (validated.autoSaveTemplate) {
-      await dbQuery(
-        `INSERT INTO templates (org_id, created_by, name, description, storage_path_pdf, field_definitions)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT DO NOTHING`,
-        [
-          orgId,
-          userId,
-          validated.title,
-          `Template automatically saved from "${validated.title}"`,
-          doc.storage_path_pdf,
-          JSON.stringify(validated.fields),
-        ]
-      );
+      try {
+        const cleanTitle = validated.title.trim();
+        const existingTpl = await dbQuery(
+          `SELECT id FROM templates WHERE org_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1`,
+          [orgId, cleanTitle]
+        );
+        if (existingTpl.rows.length === 0) {
+          const genericFields = validated.fields.map((f: any) => ({
+            ...f,
+            value: f.type === 'text' && f.label?.toLowerCase() === 'signature' ? '' : f.value,
+          }));
+          const genericRoles = [
+            { role: 'signer', label: 'Signer 1', orderIndex: 0 },
+          ];
+          await dbQuery(
+            `INSERT INTO templates (org_id, created_by, name, description, storage_path_pdf, field_definitions, recipient_roles)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+              orgId,
+              userId,
+              cleanTitle,
+              `Template automatically saved from "${cleanTitle}"`,
+              doc.storage_path_pdf,
+              JSON.stringify(genericFields),
+              JSON.stringify(genericRoles),
+            ]
+          );
+        }
+      } catch (tErr) {
+        console.warn('Auto-save template notice:', tErr);
+      }
     }
 
     // 5. Log Audit Trail
@@ -396,6 +414,44 @@ export async function DELETE(req: NextRequest) {
   } catch (err: any) {
     console.error('Error during bulk document action:', err);
     return NextResponse.json({ error: err?.message || 'Failed to process bulk document action' }, { status: 500 });
+  }
+}
+
+/**
+ * PATCH /api/documents - Bulk archive / unarchive documents
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { documentIds, action = 'archive' } = body;
+
+    if (!Array.isArray(documentIds) || documentIds.length === 0) {
+      return NextResponse.json({ error: 'No document IDs provided' }, { status: 400 });
+    }
+
+    const auth = await getAuthenticatedUserWithOrg();
+    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
+    const isSuperAdmin = !!auth?.isSuperAdmin;
+    const isArchive = action === 'archive';
+
+    const updateRes = await dbQuery(
+      `UPDATE documents
+       SET is_archived = $1,
+           archived_at = CASE WHEN $1 = true THEN NOW() ELSE NULL END,
+           updated_at = NOW()
+       WHERE id::text = ANY($2) AND (org_id = $3 OR $4 = true)
+       RETURNING id, title`,
+      [isArchive, documentIds, orgId, isSuperAdmin]
+    );
+
+    return NextResponse.json({
+      success: true,
+      count: updateRes.rowCount,
+      message: `Successfully ${isArchive ? 'archived' : 'restored'} ${updateRes.rowCount} document(s).`,
+    });
+  } catch (err: any) {
+    console.error('Error during bulk document archive/unarchive:', err);
+    return NextResponse.json({ error: err?.message || 'Failed to update documents' }, { status: 500 });
   }
 }
 

@@ -26,6 +26,8 @@ import {
   Users,
   Check,
   Trash2,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react';
 import { formatSaDateTime, formatSaDate } from '@/lib/dates';
 
@@ -47,6 +49,7 @@ export default function DocumentDetailPage() {
     original_filename: 'agreement.pdf',
     original_hash: '—',
     final_hash: '—',
+    is_archived: false,
     created_at: new Date().toISOString(),
     completed_at: null,
   });
@@ -54,23 +57,24 @@ export default function DocumentDetailPage() {
   const [recipients, setRecipients] = useState<any[]>([]);
   const [auditEvents, setAuditEvents] = useState<any[]>([]);
 
-  useEffect(() => {
-    async function loadDoc() {
-      try {
-        setIsLoading(true);
-        const res = await fetch(`/api/documents/${docId}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.document) setDocument(data.document);
-          if (data.recipients) setRecipients(data.recipients);
-          if (data.auditEvents) setAuditEvents(data.auditEvents);
-        }
-      } catch (err) {
-        console.error('Failed to load document details:', err);
-      } finally {
-        setIsLoading(false);
+  const loadDoc = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch(`/api/documents/${docId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.document) setDocument(data.document);
+        if (data.recipients) setRecipients(data.recipients);
+        if (data.auditEvents) setAuditEvents(data.auditEvents);
       }
+    } catch (err) {
+      console.error('Failed to load document details:', err);
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadDoc();
   }, [docId]);
 
@@ -79,6 +83,29 @@ export default function DocumentDetailPage() {
     navigator.clipboard.writeText(url);
     setCopiedLinkIndex(index);
     setTimeout(() => setCopiedLinkIndex(null), 2000);
+  };
+
+  const handleArchiveToggle = async (archive: boolean) => {
+    try {
+      setIsActionLoading(true);
+      const res = await fetch(`/api/documents/${docId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: archive ? 'archive' : 'unarchive' }),
+      });
+      if (res.ok) {
+        alert(archive ? 'Document archived for safekeeping & history.' : 'Document restored from archives.');
+        await loadDoc();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to update archive state');
+      }
+    } catch (err) {
+      console.error('Archive error:', err);
+      alert('An error occurred while archiving document.');
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
   const handleVoidEnvelope = async (removePermanently: boolean = true) => {
@@ -194,6 +221,31 @@ export default function DocumentDetailPage() {
                 <Download className="w-3.5 h-3.5 mr-1.5" /> Download (PDF)
               </Button>
             </a>
+            {isAllSigned && (
+              document.is_archived ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isActionLoading}
+                  onClick={() => handleArchiveToggle(false)}
+                  className="text-xs border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/40"
+                  title="Restore from historical archives"
+                >
+                  <ArchiveRestore className="w-3.5 h-3.5 mr-1" /> Restore from Archive
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isActionLoading}
+                  onClick={() => handleArchiveToggle(true)}
+                  className="text-xs border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/40"
+                  title="Archive signed document for history"
+                >
+                  <Archive className="w-3.5 h-3.5 mr-1" /> Move to Archive
+                </Button>
+              )
+            )}
             {!isAllSigned && document.status !== 'voided' && (
               <Button
                 variant="outline"
@@ -232,6 +284,40 @@ export default function DocumentDetailPage() {
 
 
       <div className="p-6 sm:p-8 space-y-6 max-w-7xl w-full mx-auto">
+        {/* Safekeeping & Archival Reminder Banner when signed */}
+        {isAllSigned && (
+          <div className="p-4 bg-emerald-950/70 border border-emerald-500/40 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in-0 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">Signed Document Ready for Safekeeping</h4>
+                <p className="text-xs text-emerald-300/90 mt-0.5">
+                  All parties have completed their signatures. Please download and preserve the finalized PDF for your permanent business records.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <a href={`/api/documents/${docId}/download`} target="_blank" download>
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-xs font-bold shadow-md shadow-emerald-600/30 text-white">
+                  <Download className="w-3.5 h-3.5 mr-1.5" /> Download for Safekeeping
+                </Button>
+              </a>
+              {!document.is_archived && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleArchiveToggle(true)}
+                  className="text-xs border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/40"
+                >
+                  <Archive className="w-3.5 h-3.5 mr-1" /> Archive Envelope
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Progress & Status Card */}
         <div className="p-5 bg-slate-900/80 border border-slate-800 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
@@ -249,6 +335,11 @@ export default function DocumentDetailPage() {
                 <h3 className="text-base font-bold text-white">
                   {isAllSigned ? 'Envelope Fully Executed & Sealed' : 'Signing In Progress'}
                 </h3>
+                {document.is_archived && (
+                  <Badge variant="outline" className="bg-slate-800 text-cyan-300 border-cyan-500/30 text-[10px]">
+                    📁 Archived
+                  </Badge>
+                )}
                 {isAllSigned ? (
                   <Badge variant="success">Completed</Badge>
                 ) : (

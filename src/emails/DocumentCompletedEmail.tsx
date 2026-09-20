@@ -48,13 +48,19 @@ export function DocumentCompletedEmail({
 
           <Section style={content}>
             <Heading as="h2" style={heading}>
-              All Parties Have Signed
+              All Parties Have Signed — Ready for Safekeeping
             </Heading>
             <Text style={paragraph}>Hello {recipientName},</Text>
             <Text style={paragraph}>
-              All required parties have completed their electronic signatures on <strong>"{documentTitle}"</strong>.
-              The finalised, tamper-evident PDF and the official South African ECTA Signature Certificate are now available.
+              All designated signatories have completed their electronic signatures on <strong>"{documentTitle}"</strong>.
             </Text>
+
+            <Section style={safekeepingCard}>
+              <Text style={safekeepingTitle}>🔒 Safekeeping & Business Archival Notice</Text>
+              <Text style={safekeepingText}>
+                The fully executed agreement and South African ECTA cryptographic certificate are ready. Please download and store a copy in your company's records for permanent legal and compliance history.
+              </Text>
+            </Section>
 
             <Section style={infoCard}>
               <Text style={infoRow}>
@@ -63,16 +69,18 @@ export function DocumentCompletedEmail({
               <Text style={infoRow}>
                 <strong>Completed On:</strong> {completedAtFormatted}
               </Text>
-              <Text style={infoRow}>
-                <strong>Integrity SHA-256 Hash:</strong>
-                <br />
-                <code style={hashCode}>{finalHash}</code>
-              </Text>
+              {finalHash && (
+                <Text style={infoRow}>
+                  <strong>Cryptographic Integrity SHA-256:</strong>
+                  <br />
+                  <code style={hashCode}>{finalHash}</code>
+                </Text>
+              )}
             </Section>
 
             <Section style={btnSection}>
               <Button style={{ ...button, backgroundColor: primaryColor }} href={downloadUrl}>
-                Download Signed PDF & Certificate
+                Download Executed PDF & Certificate
               </Button>
             </Section>
 
@@ -148,6 +156,28 @@ const paragraph: React.CSSProperties = {
   lineHeight: '24px',
   color: '#334155',
   margin: '0 0 12px',
+};
+
+const safekeepingCard: React.CSSProperties = {
+  backgroundColor: '#f0fdf4',
+  border: '1px solid #bbf7d0',
+  borderRadius: '8px',
+  padding: '16px',
+  margin: '16px 0',
+};
+
+const safekeepingTitle: React.CSSProperties = {
+  fontSize: '15px',
+  fontWeight: 'bold',
+  color: '#166534',
+  margin: '0 0 6px',
+};
+
+const safekeepingText: React.CSSProperties = {
+  fontSize: '13px',
+  lineHeight: '20px',
+  color: '#15803d',
+  margin: '0',
 };
 
 const infoCard: React.CSSProperties = {

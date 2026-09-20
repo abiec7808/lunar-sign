@@ -179,9 +179,9 @@ function NewDocumentContent() {
                 rRoles.map((r: any, idx: number) => ({
                   id: r.id || `recip-${idx + 1}`,
                   document_id: 'live-doc',
-                  name: r.name || '',
-                  email: r.email || '',
-                  phone: r.phone || '',
+                  name: '', // Blank signatory name as every signer is different
+                  email: '', // Blank signatory email
+                  phone: '',
                   role: r.role || 'signer',
                   order_index: idx,
                   status: 'pending',
@@ -392,8 +392,8 @@ function NewDocumentContent() {
           description: templateDescription.trim() || `Custom template for ${templateName.trim()}`,
           fields,
           recipientRoles: recipients.map((r, i) => ({
-            name: r.name,
-            role: r.role,
+            role: r.role || 'signer',
+            label: `Signer ${i + 1}`,
             orderIndex: i,
             authMethod: r.auth_method,
           })),
