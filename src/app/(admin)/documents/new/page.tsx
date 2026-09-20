@@ -43,7 +43,7 @@ function NewDocumentContent() {
   const templateId = searchParams.get('templateId');
 
   // Wizard Steps: 1 = Upload & Meta, 2 = Recipients, 3 = Place Fields, 4 = Pre-Fill & Review
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(templateId ? 2 : 1);
 
   // Document Metadata State
   const [docTitle, setDocTitle] = useState('Standard Service Level Agreement (SLA)');
@@ -249,7 +249,8 @@ function NewDocumentContent() {
               }
             }
 
-            setTemplateNotification(`Template "${tpl.name}" loaded successfully!`);
+            setCurrentStep(2);
+            setTemplateNotification(`Template "${tpl.name}" loaded! Proceed with entering recipient details or edit field placements.`);
             setTimeout(() => setTemplateNotification(null), 5000);
           }
         }
