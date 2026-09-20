@@ -451,6 +451,8 @@ export default function SignerPortalPage() {
         onNextField={handleNextField}
         onPrevField={handlePrevField}
         onFinishSigning={handleFinishSigning}
+        isSubmitting={isSubmitting}
+        role={recipient.role}
       />
 
       {/* Mandatory ECTA Consent Gate Modal */}

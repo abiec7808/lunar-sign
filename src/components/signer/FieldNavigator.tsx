@@ -12,6 +12,7 @@ interface FieldNavigatorProps {
   onPrevField: () => void;
   onFinishSigning: () => void;
   isSubmitting?: boolean;
+  role?: string;
 }
 
 export function FieldNavigator({
@@ -22,8 +23,10 @@ export function FieldNavigator({
   onPrevField,
   onFinishSigning,
   isSubmitting = false,
+  role = 'signer',
 }: FieldNavigatorProps) {
-  const allCompleted = completedFieldsCount >= totalFieldsCount && totalFieldsCount > 0;
+  const isApprover = role === 'approver';
+  const allCompleted = totalFieldsCount === 0 || completedFieldsCount >= totalFieldsCount;
   const progressPct = totalFieldsCount > 0 ? Math.round((completedFieldsCount / totalFieldsCount) * 100) : 100;
 
   return (
@@ -33,7 +36,11 @@ export function FieldNavigator({
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex flex-col">
             <span className="text-xs font-semibold text-slate-200">
-              Fields Completed: {completedFieldsCount} of {totalFieldsCount}
+              {totalFieldsCount === 0
+                ? isApprover
+                  ? 'Review & Approval Ready'
+                  : 'Ready to Submit'
+                : `Fields Completed: ${completedFieldsCount} of ${totalFieldsCount}`}
             </span>
             <div className="w-32 h-1.5 bg-slate-800 rounded-full mt-1 overflow-hidden">
               <div
@@ -43,45 +50,63 @@ export function FieldNavigator({
             </div>
           </div>
           <span className="text-xs text-slate-400 font-mono sm:hidden">
-            {completedFieldsCount}/{totalFieldsCount} Done
+            {totalFieldsCount === 0
+              ? isApprover
+                ? 'Approve'
+                : 'Ready'
+              : `${completedFieldsCount}/${totalFieldsCount} Done`}
           </span>
         </div>
 
         {/* Navigation Controls */}
         <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onPrevField}
-            disabled={currentFieldIndex <= 0}
-            className="h-9 px-3 text-xs"
-          >
-            <ChevronUp className="w-4 h-4 mr-1" /> Prev
-          </Button>
+          {totalFieldsCount > 1 && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onPrevField}
+                disabled={currentFieldIndex <= 0}
+                className="h-9 px-3 text-xs"
+              >
+                <ChevronUp className="w-4 h-4 mr-1" /> Prev
+              </Button>
 
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={onNextField}
-            disabled={currentFieldIndex >= totalFieldsCount - 1}
-            className="h-9 px-3 text-xs font-semibold bg-slate-800 text-indigo-300 hover:bg-slate-700"
-          >
-            Next Field <ChevronDown className="w-4 h-4 ml-1" />
-          </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={onNextField}
+                disabled={currentFieldIndex >= totalFieldsCount - 1}
+                className="h-9 px-3 text-xs font-semibold bg-slate-800 text-indigo-300 hover:bg-slate-700"
+              >
+                Next Field <ChevronDown className="w-4 h-4 ml-1" />
+              </Button>
+            </>
+          )}
 
-          {/* Finish Button */}
+          {/* Finish / Approve Button */}
           <Button
             type="button"
             variant="default"
             size="sm"
             onClick={onFinishSigning}
             disabled={!allCompleted || isSubmitting}
-            className="h-9 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/25 disabled:opacity-40"
+            className={`h-9 px-5 text-xs font-bold text-white shadow-lg disabled:opacity-40 transition-all ${
+              isApprover
+                ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/25'
+                : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/25'
+            }`}
           >
             <CheckCircle2 className="w-4 h-4 mr-1.5" />
-            {isSubmitting ? 'Finalising...' : 'Finish & Submit'}
+            {isSubmitting
+              ? isApprover
+                ? 'Approving...'
+                : 'Finalising...'
+              : isApprover
+              ? 'Approve & Complete'
+              : 'Finish & Submit'}
           </Button>
         </div>
       </div>
