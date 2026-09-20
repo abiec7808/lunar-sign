@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { dbQuery } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/passwords';
 import { setSessionCookie, UserSession } from '@/lib/auth/session';
+import { emailService } from '@/lib/email/service';
 
 const RegisterSchema = z.object({
   businessName: z.string().min(2, 'Business Name is required'),
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
 
     await setSessionCookie(session);
 
-    // 6. Log Audit Event if document exists or finish registration
+    // 6. Log Audit Event
     try {
       await dbQuery(
         `INSERT INTO audit_events (actor_type, event_type, description, metadata)
@@ -110,6 +111,25 @@ export async function POST(req: NextRequest) {
       );
     } catch (auditErr) {
       console.warn('Audit event log warning:', auditErr);
+    }
+
+    // 7. Inform Super Admin admin@lunarposgeorge.co.za about the new business registration
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunaposgeorge.co.za';
+      await emailService.sendNewRegistrationAlert({
+        to: 'admin@lunarposgeorge.co.za',
+        businessName: validated.businessName,
+        adminFullName: validated.adminFullName,
+        adminEmail: email,
+        phone: validated.phone || null,
+        vatNumber: validated.vatNumber || null,
+        companyRegNumber: validated.companyRegNumber || null,
+        address: validated.address || null,
+        approvalUrl: `${appUrl}/businesses`,
+      });
+      console.log(`[Registration] Alert email successfully dispatched to admin@lunarposgeorge.co.za for ${validated.businessName}`);
+    } catch (emailErr) {
+      console.error('[Registration] Failed to send super admin alert email:', emailErr);
     }
 
     return NextResponse.json({

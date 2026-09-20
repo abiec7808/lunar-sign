@@ -56,13 +56,13 @@ export function AdminHeader({ title, subtitle, actionButton }: AdminHeaderProps)
     .slice(0, 2) || 'AD';
 
   return (
-    <header className="h-16 border-b border-slate-800 bg-slate-950/60 backdrop-blur-md px-8 flex items-center justify-between sticky top-0 z-30">
-      <div>
-        <h2 className="text-lg font-bold text-white tracking-tight">{title}</h2>
-        {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
+    <header className="min-h-16 py-2 border-b border-slate-800 bg-slate-950/60 backdrop-blur-md px-4 sm:px-6 md:px-8 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 sticky top-0 z-30">
+      <div className="overflow-hidden">
+        <h2 className="text-base sm:text-lg font-bold text-white tracking-tight truncate">{title}</h2>
+        {subtitle && <p className="text-[11px] sm:text-xs text-slate-400 truncate">{subtitle}</p>}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {actionButton}
 
         <div className="h-5 w-px bg-slate-800" />

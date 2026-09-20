@@ -57,10 +57,11 @@ export function FieldRenderer({
   const autoFontSize = Math.max(9, Math.min(16, Math.round(heightVal * 2.8)));
   const effectiveFontSize = customFontSize ? `${customFontSize}px` : `${autoFontSize}px`;
 
-  // Strict Arial font family for all filled data lines
+  // Strict Arial font family with pure crisp black font color for all filled lines
   const arialFontStyle: React.CSSProperties = {
     fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif',
     fontSize: effectiveFontSize,
+    color: '#000000',
   };
 
   // Validation warnings
@@ -106,28 +107,28 @@ export function FieldRenderer({
     }
   };
 
-  // 1. In Editor Mode: Display compact placeholder box with label & recipient border
+  // 1. In Editor Mode: Display crisp placeholder box on white contract page with pure black text
   if (isEditorMode) {
     return (
       <div
         onClick={() => onSelectField?.(field)}
         className={cn(
-          'w-full h-full flex items-center justify-between px-1.5 py-0.5 rounded border select-none cursor-pointer transition-all font-medium overflow-hidden',
-          isSelected ? 'ring-2 ring-white shadow-md z-30' : 'opacity-90 hover:opacity-100'
+          'w-full h-full flex items-center justify-between px-1.5 py-0.5 rounded border-2 select-none cursor-pointer transition-all font-semibold overflow-hidden shadow-sm',
+          isSelected ? 'ring-2 ring-indigo-600 shadow-lg z-30 scale-[1.01]' : 'opacity-95 hover:opacity-100'
         )}
         style={{
           borderColor: recipientColor,
-          backgroundColor: `${recipientColor}15`,
-          color: '#ffffff',
+          backgroundColor: '#ffffff',
+          color: '#000000',
           ...arialFontStyle,
         }}
       >
-        <span className="flex items-center gap-1 font-semibold truncate text-[10px] text-slate-100">
+        <span className="flex items-center gap-1 font-bold truncate text-[11px] text-slate-950">
           <span style={{ color: recipientColor }}>{renderIcon()}</span>
           <span className="truncate">{field.label || field.type.toUpperCase()}</span>
-          {field.required && <span className="text-red-400 font-bold ml-0.5">*</span>}
+          {field.required && <span className="text-red-600 font-bold ml-0.5">*</span>}
         </span>
-        <span className="truncate text-[9px] text-slate-300 ml-1 hidden sm:inline">
+        <span className="truncate text-[10px] font-medium text-slate-600 ml-1 hidden sm:inline">
           {recipient ? recipient.name.split(' ')[0] : 'Sender'}
         </span>
       </div>
@@ -192,8 +193,8 @@ export function FieldRenderer({
             placeholder="R 0,00"
             value={value}
             onChange={(e) => onChange?.(e.target.value)}
-            style={arialFontStyle}
-            className="w-full h-full px-1.5 py-0 rounded border border-slate-700 bg-slate-900 text-slate-100 focus:ring-1 focus:ring-indigo-500 outline-none leading-none"
+            style={{ ...arialFontStyle, color: '#000000', backgroundColor: '#ffffff' }}
+            className="w-full h-full px-1.5 py-0 rounded border border-slate-400 bg-white text-black font-semibold focus:ring-1 focus:ring-indigo-600 outline-none leading-none shadow-sm placeholder:text-slate-400"
           />
         </div>
       );
@@ -207,14 +208,14 @@ export function FieldRenderer({
             placeholder="13-digit SA ID"
             value={value}
             onChange={(e) => onChange?.(e.target.value.replace(/\D/g, ''))}
-            style={arialFontStyle}
+            style={{ ...arialFontStyle, color: '#000000', backgroundColor: '#ffffff' }}
             className={cn(
-              'w-full h-full px-1.5 py-0 rounded border bg-slate-900 text-slate-100 focus:outline-none focus:ring-1 leading-none',
-              validationError ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-700 focus:ring-indigo-500'
+              'w-full h-full px-1.5 py-0 rounded border bg-white text-black font-semibold focus:outline-none focus:ring-1 leading-none shadow-sm placeholder:text-slate-400',
+              validationError ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-400 focus:ring-indigo-600'
             )}
           />
           {validationError && (
-            <span className="text-[9px] text-red-400 absolute -bottom-3.5 left-0 truncate max-w-full font-sans">
+            <span className="text-[9px] text-red-600 font-bold absolute -bottom-3.5 left-0 truncate max-w-full font-sans">
               {validationError}
             </span>
           )}
@@ -230,10 +231,10 @@ export function FieldRenderer({
             placeholder="4XXXXXXXXX"
             value={value}
             onChange={(e) => onChange?.(e.target.value.replace(/\D/g, ''))}
-            style={arialFontStyle}
+            style={{ ...arialFontStyle, color: '#000000', backgroundColor: '#ffffff' }}
             className={cn(
-              'w-full h-full px-1.5 py-0 rounded border bg-slate-900 text-slate-100 focus:outline-none focus:ring-1 leading-none',
-              validationError ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-700 focus:ring-indigo-500'
+              'w-full h-full px-1.5 py-0 rounded border bg-white text-black font-semibold focus:outline-none focus:ring-1 leading-none shadow-sm placeholder:text-slate-400',
+              validationError ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-400 focus:ring-indigo-600'
             )}
           />
         </div>
@@ -242,11 +243,11 @@ export function FieldRenderer({
     case 'date_signed':
       return (
         <div
-          style={arialFontStyle}
-          className="w-full h-full px-1.5 py-0 rounded border border-slate-800 bg-slate-950/80 text-slate-300 flex items-center justify-between"
+          style={{ ...arialFontStyle, color: '#000000', backgroundColor: '#ffffff' }}
+          className="w-full h-full px-1.5 py-0 rounded border border-slate-400 bg-white text-black font-semibold flex items-center justify-between shadow-sm"
         >
           <span className="truncate">{value || formatSaDate(new Date())}</span>
-          <Calendar className="w-3 h-3 text-slate-500 shrink-0 ml-1" />
+          <Calendar className="w-3 h-3 text-slate-700 shrink-0 ml-1" />
         </div>
       );
 
@@ -256,8 +257,8 @@ export function FieldRenderer({
         <select
           value={value}
           onChange={(e) => onChange?.(e.target.value)}
-          style={arialFontStyle}
-          className="w-full h-full px-1 py-0 rounded border border-slate-700 bg-slate-900 text-slate-100 focus:ring-1 focus:ring-indigo-500 outline-none leading-none"
+          style={{ ...arialFontStyle, color: '#000000', backgroundColor: '#ffffff' }}
+          className="w-full h-full px-1 py-0 rounded border border-slate-400 bg-white text-black font-semibold focus:ring-1 focus:ring-indigo-600 outline-none leading-none shadow-sm"
         >
           <option value="">Select...</option>
           {options.map((opt, i) => (
@@ -276,8 +277,8 @@ export function FieldRenderer({
           value={value}
           onChange={(e) => onChange?.(e.target.value)}
           readOnly={field.read_only}
-          style={arialFontStyle}
-          className="w-full h-full px-1.5 py-0 rounded border border-slate-700 bg-slate-900 text-slate-100 focus:ring-1 focus:ring-indigo-500 outline-none leading-none"
+          style={{ ...arialFontStyle, color: '#000000', backgroundColor: '#ffffff' }}
+          className="w-full h-full px-1.5 py-0 rounded border border-slate-400 bg-white text-black font-semibold focus:ring-1 focus:ring-indigo-600 outline-none leading-none shadow-sm placeholder:text-slate-400"
         />
       );
   }

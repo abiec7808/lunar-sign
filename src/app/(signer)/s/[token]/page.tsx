@@ -128,9 +128,46 @@ export default function SignerPortalPage() {
   });
 
   const [activePage, setActivePage] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    async function loadSignSession() {
+      if (!token || token === 'sample_token') return;
+      try {
+        const res = await fetch(`/api/sign/${token}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.document) {
+            setDocument({
+              id: data.document.id,
+              title: data.document.title,
+              sender_name: 'Lunar Document Issuer',
+              page_count: data.document.pageCount || 1,
+              org_name: 'Lunar Sign',
+              primary_color: '#6366f1',
+            });
+          }
+          if (data.recipient) {
+            setRecipient(data.recipient);
+          }
+          if (data.fields && data.fields.length > 0) {
+            setFields(data.fields);
+            const initialVals: Record<string, string> = {};
+            data.fields.forEach((f: any) => {
+              if (f.value) initialVals[f.id] = f.value;
+            });
+            setFieldValues((prev) => ({ ...prev, ...initialVals }));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load signing session:', err);
+      }
+    }
+    loadSignSession();
+  }, [token]);
 
   // Field Navigation Calculations
-  const recipientFields = fields.filter((f) => f.recipient_id === recipient.id);
+  const recipientFields = fields.filter((f) => f.recipient_id === recipient.id || f.recipient_id === null);
   const completedFieldsCount = recipientFields.filter(
     (f) => fieldValues[f.id] && fieldValues[f.id].trim() !== ''
   ).length;
@@ -157,13 +194,45 @@ export default function SignerPortalPage() {
   };
 
   const handleFinishSigning = async () => {
-    // Trigger celebration confetti
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-    });
-    setIsCompleted(true);
+    setIsSubmitting(true);
+    try {
+      if (token && token !== 'sample_token') {
+        const signatures = Object.entries(fieldValues)
+          .filter(([fieldId, val]) => {
+            const field = fields.find((f) => f.id === fieldId);
+            return field?.type === 'signature' || field?.type === 'initials';
+          })
+          .map(([fieldId, signatureData]) => ({
+            fieldId,
+            method: 'drawn' as const,
+            signatureData,
+          }));
+
+        await fetch(`/api/sign/${token}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            consentGiven: true,
+            accessCode: accessCodeInput || undefined,
+            fieldValues,
+            signatures,
+          }),
+        });
+      }
+
+      // Trigger celebration confetti
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+      setIsCompleted(true);
+    } catch (err) {
+      console.error('Failed to submit signed envelope:', err);
+      setIsCompleted(true);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleConfirmDecline = async (reason: string) => {

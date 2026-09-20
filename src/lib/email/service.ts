@@ -9,6 +9,7 @@ import { SignedConfirmationEmail, SignedConfirmationEmailProps } from '@/emails/
 import { ReminderEmail, ReminderEmailProps } from '@/emails/ReminderEmail';
 import { DeclinedEmail, DeclinedEmailProps } from '@/emails/DeclinedEmail';
 import { VoidedEmail, VoidedEmailProps } from '@/emails/VoidedEmail';
+import { NewRegistrationAlertEmail, NewRegistrationAlertEmailProps } from '@/emails/NewRegistrationAlertEmail';
 
 export interface SendEmailOptions {
   to: string;
@@ -27,6 +28,7 @@ export interface IEmailService {
   sendReminder(props: ReminderEmailProps & { to: string; documentId: string; recipientId: string }): Promise<boolean>;
   sendDeclined(props: DeclinedEmailProps & { to: string; documentId: string }): Promise<boolean>;
   sendVoided(props: VoidedEmailProps & { to: string; documentId: string; recipientId?: string }): Promise<boolean>;
+  sendNewRegistrationAlert(props: NewRegistrationAlertEmailProps & { to?: string }): Promise<boolean>;
 }
 
 export class HybridEmailService implements IEmailService {
@@ -201,6 +203,17 @@ export class HybridEmailService implements IEmailService {
       documentId: props.documentId,
       recipientId: props.recipientId,
       templateName: 'voided',
+    });
+    return res.success;
+  }
+
+  async sendNewRegistrationAlert(props: NewRegistrationAlertEmailProps & { to?: string }): Promise<boolean> {
+    const recipient = props.to || 'admin@lunarposgeorge.co.za';
+    const res = await this.sendEmail({
+      to: recipient,
+      subject: `🚀 New Business Registration: ${props.businessName} (Approval Needed)`,
+      reactElement: React.createElement(NewRegistrationAlertEmail, props),
+      templateName: 'super_admin_registration_alert',
     });
     return res.success;
   }

@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FieldPalette } from '@/components/editor/FieldPalette';
 import { InteractivePdfCanvas } from '@/components/editor/InteractivePdfCanvas';
 import { FieldConfigDialog } from '@/components/editor/FieldConfigDialog';
@@ -31,6 +32,8 @@ import {
   Download,
   Copy,
   FileText,
+  Users,
+  BookOpen,
 } from 'lucide-react';
 
 export default function NewDocumentPage() {
@@ -51,6 +54,25 @@ export default function NewDocumentPage() {
   const [activePage, setActivePage] = useState(1);
   const [fileBase64, setFileBase64] = useState<string>('');
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
+
+  // Address book contacts state
+  const [addressBook, setAddressBook] = useState<any[]>([]);
+  const [isAddressBookModalOpen, setIsAddressBookModalOpen] = useState(false);
+
+  useEffect(() => {
+    async function loadAddressBook() {
+      try {
+        const res = await fetch('/api/contacts');
+        if (res.ok) {
+          const data = await res.json();
+          setAddressBook(data.contacts || []);
+        }
+      } catch (err) {
+        console.error('Failed to load address book:', err);
+      }
+    }
+    loadAddressBook();
+  }, []);
 
   // Recipients State
   const [recipients, setRecipients] = useState<Recipient[]>([
@@ -279,6 +301,41 @@ export default function NewDocumentPage() {
       created_at: new Date().toISOString(),
     };
     setRecipients([...recipients, newRecip]);
+  };
+
+  const handleSelectFromAddressBook = (contact: any) => {
+    const newIndex = recipients.length;
+    const newRecip: Recipient = {
+      id: `recip-${Date.now()}`,
+      document_id: 'live-doc',
+      name: contact.name,
+      email: contact.email,
+      phone: contact.phone || '',
+      role: (contact.role as RecipientRole) || 'signer',
+      order_index: newIndex,
+      status: 'pending',
+      auth_method: 'none',
+      color: getRecipientColor(newIndex),
+      created_at: new Date().toISOString(),
+    };
+    setRecipients([...recipients, newRecip]);
+    setIsAddressBookModalOpen(false);
+  };
+
+  const handleQuickFillRecipient = (recipId: string, contact: any) => {
+    setRecipients(
+      recipients.map((r) =>
+        r.id === recipId
+          ? {
+              ...r,
+              name: contact.name,
+              email: contact.email,
+              phone: contact.phone || '',
+              role: (contact.role as RecipientRole) || r.role,
+            }
+          : r
+      )
+    );
   };
 
   const handleUpdateRecipient = (id: string, updates: Partial<Recipient>) => {
@@ -529,15 +586,26 @@ export default function NewDocumentPage() {
                 <CardTitle className="text-base text-white">2. Recipients & Signing Roles</CardTitle>
                 <p className="text-xs text-slate-400 mt-0.5">Assign colour-coded roles and authentication</p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleAddRecipient}
-                className="text-xs border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/40"
-              >
-                <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Add Recipient
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAddressBookModalOpen(true)}
+                  className="text-xs border-slate-700 bg-slate-900 text-cyan-300 hover:bg-slate-800"
+                >
+                  <BookOpen className="w-3.5 h-3.5 mr-1.5 text-cyan-400" /> Select from Address Book ({addressBook.length})
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddRecipient}
+                  className="text-xs border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/40"
+                >
+                  <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Add Recipient
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4 pt-6">
               <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-slate-800">
@@ -710,8 +778,8 @@ export default function NewDocumentPage() {
                             setFields(fields.map((f) => (f.id === field.id ? { ...f, value: val } : f)));
                           }}
                           placeholder="Enter pre-fill value in Arial font..."
-                          style={{ fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif' }}
-                          className="bg-slate-900 border-slate-700 text-xs"
+                          style={{ fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif', color: '#000000', backgroundColor: '#ffffff' }}
+                          className="bg-white text-black font-semibold border-slate-300 text-xs shadow-sm placeholder:text-slate-400"
                         />
                       </div>
                     ))}
@@ -734,6 +802,51 @@ export default function NewDocumentPage() {
           </Card>
         </div>
       )}
+
+      {/* Address Book Quick Select Modal Dialog */}
+      <Dialog open={isAddressBookModalOpen} onOpenChange={setIsAddressBookModalOpen}>
+        <DialogContent className="max-w-md bg-slate-900 border-slate-700 text-white shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold flex items-center gap-2">
+              <Users className="w-5 h-5 text-indigo-400" /> Select Signatory from Address Book
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 mt-2 max-h-[60vh] overflow-y-auto pr-1">
+            {addressBook.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-400 bg-slate-950 rounded-xl border border-slate-800">
+                No saved contacts found in your address book.
+                <br />
+                <a href="/contacts" target="_blank" className="text-indigo-400 hover:underline mt-2 inline-block font-semibold">
+                  Open Address Book to add contacts →
+                </a>
+              </div>
+            ) : (
+              addressBook.map((contact) => (
+                <div
+                  key={contact.id}
+                  onClick={() => handleSelectFromAddressBook(contact)}
+                  className="p-3 bg-slate-950 hover:bg-indigo-950/40 border border-slate-800 hover:border-indigo-500/50 rounded-xl cursor-pointer transition-all flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-slate-800 group-hover:bg-indigo-600 text-white flex items-center justify-center text-xs font-bold transition-colors">
+                      {contact.name[0]?.toUpperCase() || 'U'}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white group-hover:text-indigo-200">{contact.name}</div>
+                      <div className="text-[11px] text-slate-400 font-mono">{contact.email}</div>
+                      {contact.phone && <div className="text-[10px] text-slate-500 font-mono">{contact.phone}</div>}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline" className="text-xs h-7 border-slate-700 text-slate-300 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-500">
+                    Select
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Field Configuration Dialog */}
       <FieldConfigDialog
