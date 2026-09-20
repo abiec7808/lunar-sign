@@ -684,7 +684,9 @@ function NewDocumentContent() {
                           #{index + 1}
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-[11px] font-semibold text-slate-300">{theme.name}</span>
+                          <span className="text-[11px] font-semibold text-slate-200">
+                            {recip.name?.trim() ? recip.name : `Signatory #${index + 1}`}
+                          </span>
                           <span className="text-[10px] text-cyan-400 font-mono">{orderLabel}</span>
                         </div>
                       </div>
