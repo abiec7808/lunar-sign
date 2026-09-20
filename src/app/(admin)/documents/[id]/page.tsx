@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AdminHeader } from '@/components/admin/AdminHeader';
@@ -23,8 +23,10 @@ import {
   ArrowLeft,
   Calendar,
   Lock,
+  Users,
+  Check,
 } from 'lucide-react';
-import { formatSaDateTime } from '@/lib/dates';
+import { formatSaDateTime, formatSaDate } from '@/lib/dates';
 
 export default function DocumentDetailPage() {
   const params = useParams();
@@ -32,96 +34,72 @@ export default function DocumentDetailPage() {
   const docId = (params?.id as string) || 'doc-001';
 
   const [activeTab, setActiveTab] = useState<'overview' | 'audit' | 'recipients'>('overview');
-  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedLinkIndex, setCopiedLinkIndex] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock Document Model
-  const document = {
+  const [document, setDocument] = useState<any>({
     id: docId,
-    title: 'Standard South African Service Level Agreement (SLA)',
-    status: 'completed',
+    title: 'Standard Service Level Agreement (SLA)',
+    status: 'sent',
     page_count: 2,
-    original_filename: 'standard_sla_2026.pdf',
-    original_hash: 'a68c92a912e9b0849318b76c8c49e776e03881df3e04e93014a40026e6951234',
-    final_hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    created_at: new Date(Date.now() - 3600000 * 24).toISOString(),
-    completed_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    recipients: [
-      {
-        id: 'r-1',
-        name: 'Johan Van Der Merwe',
-        email: 'johan@example.co.za',
-        role: 'signer',
-        status: 'signed',
-        auth_method: 'none',
-        opened_at: new Date(Date.now() - 3600000 * 18).toISOString(),
-        signed_at: new Date(Date.now() - 3600000 * 16).toISOString(),
-        ip_address: '105.213.44.12 (Cape Town, ZA)',
-        token: 'sample_token_johan_123',
-      },
-      {
-        id: 'r-2',
-        name: 'Sarah Jenkins',
-        email: 'sarah@example.co.za',
-        role: 'signer',
-        status: 'signed',
-        auth_method: 'access_code',
-        opened_at: new Date(Date.now() - 3600000 * 5).toISOString(),
-        signed_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-        ip_address: '197.97.100.88 (George, ZA)',
-        token: 'sample_token_sarah_456',
-      },
-    ],
-    audit_events: [
-      {
-        id: 'ev-1',
-        event_type: 'document.created',
-        description: 'Document uploaded and initialized by Lunar Admin.',
-        created_at: new Date(Date.now() - 3600000 * 24).toISOString(),
-        actor: 'Admin',
-      },
-      {
-        id: 'ev-2',
-        event_type: 'document.sent',
-        description: 'Signing links dispatched via Resend transactional service.',
-        created_at: new Date(Date.now() - 3600000 * 23).toISOString(),
-        actor: 'System',
-      },
-      {
-        id: 'ev-3',
-        event_type: 'document.opened',
-        description: 'Signer Johan Van Der Merwe accessed signing URL.',
-        created_at: new Date(Date.now() - 3600000 * 18).toISOString(),
-        actor: 'johan@example.co.za',
-      },
-      {
-        id: 'ev-4',
-        event_type: 'signature.affixed',
-        description: 'Johan Van Der Merwe gave ECTA consent and affixed signature.',
-        created_at: new Date(Date.now() - 3600000 * 16).toISOString(),
-        actor: 'johan@example.co.za',
-      },
-      {
-        id: 'ev-5',
-        event_type: 'document.completed',
-        description: 'All signers signed. PDF flattened, SHA-256 sealed, and ECTA certificate generated.',
-        created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-        actor: 'System',
-      },
-    ],
-  };
+    original_filename: 'service_agreement.pdf',
+    original_hash: '—',
+    final_hash: '—',
+    created_at: new Date().toISOString(),
+    completed_at: null,
+  });
 
-  const handleCopySigningLink = (token: string) => {
+  const [recipients, setRecipients] = useState<any[]>([
+    {
+      id: 'r-1',
+      name: 'Johan Van Der Merwe',
+      email: 'johan@example.co.za',
+      role: 'signer',
+      status: 'pending',
+      auth_method: 'none',
+      token: 'sample_token',
+    },
+  ]);
+
+  const [auditEvents, setAuditEvents] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function loadDoc() {
+      try {
+        setIsLoading(true);
+        const res = await fetch(`/api/documents/${docId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.document) setDocument(data.document);
+          if (data.recipients) setRecipients(data.recipients);
+          if (data.auditEvents) setAuditEvents(data.auditEvents);
+        }
+      } catch (err) {
+        console.error('Failed to load document details:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadDoc();
+  }, [docId]);
+
+  const handleCopySigningLink = (token: string, index: number) => {
     const url = `${window.location.origin}/s/${token}`;
     navigator.clipboard.writeText(url);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
+    setCopiedLinkIndex(index);
+    setTimeout(() => setCopiedLinkIndex(null), 2000);
   };
+
+  const signedCount = recipients.filter((r) => r.status === 'signed').length;
+  const totalCount = recipients.length;
+  const isAllSigned = signedCount === totalCount && totalCount > 0;
+  const progressPct = totalCount > 0 ? Math.round((signedCount / totalCount) * 100) : 0;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#090d16]">
       <AdminHeader
         title={document.title}
-        subtitle={`Envelope ID: ${document.id} • ${document.page_count} Pages`}
+        subtitle={`Envelope ID: ${document.id} • ${document.page_count || 1} Pages • ${signedCount} of ${totalCount} Signatures Collected`}
         actionButton={
           <div className="flex items-center gap-2">
             <Link href="/documents">
@@ -134,174 +112,235 @@ export default function DocumentDetailPage() {
                 <ShieldCheck className="w-3.5 h-3.5 mr-1" /> Public Verify
               </Button>
             </Link>
-            <Button
-              variant="default"
-              size="sm"
-              className="bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold"
-            >
-              <Download className="w-3.5 h-3.5 mr-1.5" /> Download Signed PDF & Certificate
-            </Button>
+            <a href={`/api/documents/${docId}/download`} target="_blank" download>
+              <Button
+                variant="default"
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold shadow-lg shadow-indigo-600/25"
+              >
+                <Download className="w-3.5 h-3.5 mr-1.5" /> Download Document (PDF)
+              </Button>
+            </a>
           </div>
         }
       />
 
-      <div className="p-8 space-y-6 max-w-7xl w-full mx-auto">
-        {/* Status Bar */}
-        <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <CheckCircle2 className="w-6 h-6" />
+      <div className="p-6 sm:p-8 space-y-6 max-w-7xl w-full mx-auto">
+        {/* Progress & Status Card */}
+        <div className="p-5 bg-slate-900/80 border border-slate-800 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div
+              className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                isAllSigned
+                  ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
+                  : 'bg-indigo-500/20 border border-indigo-500/30 text-indigo-400'
+              }`}
+            >
+              {isAllSigned ? <CheckCircle2 className="w-7 h-7" /> : <Clock className="w-7 h-7" />}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white">Envelope Execution Completed</h3>
-                <Badge variant="success">Fully Signed & Sealed</Badge>
+                <h3 className="text-base font-bold text-white">
+                  {isAllSigned ? 'Envelope Fully Executed & Sealed' : 'Signing In Progress'}
+                </h3>
+                {isAllSigned ? (
+                  <Badge variant="success">Completed</Badge>
+                ) : (
+                  <Badge variant="default">{signedCount} of {totalCount} Signed</Badge>
+                )}
               </div>
               <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Completed on: {formatSaDateTime(document.completed_at)}
+                Created: {formatSaDateTime(document.created_at)} • South African ECTA 25 of 2002 Compliant
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="text-xs">
-              <Bell className="w-3.5 h-3.5 mr-1" /> Send Notification
-            </Button>
-            <Button variant="outline" size="sm" className="text-xs text-red-400 hover:bg-red-950/40 border-red-900">
-              <Ban className="w-3.5 h-3.5 mr-1" /> Void Envelope
-            </Button>
+          <div className="flex items-center gap-3">
+            <div className="w-48 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-right">
+              <div className="flex justify-between text-xs font-semibold mb-1 text-slate-300">
+                <span>Progress</span>
+                <span>{progressPct}%</span>
+              </div>
+              <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all duration-500"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-          <TabsList className="bg-slate-950 border-slate-800">
-            <TabsTrigger value="overview">Overview & Integrity</TabsTrigger>
-            <TabsTrigger value="recipients">Signatories ({document.recipients.length})</TabsTrigger>
-            <TabsTrigger value="audit">Audit Trail ({document.audit_events.length})</TabsTrigger>
+        {/* Tab Navigation */}
+        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)}>
+          <TabsList className="bg-slate-900 border border-slate-800">
+            <TabsTrigger value="overview" className="text-xs">
+              Overview & Integrity
+            </TabsTrigger>
+            <TabsTrigger value="recipients" className="text-xs">
+              Signatories & Members ({recipients.length})
+            </TabsTrigger>
+            <TabsTrigger value="audit" className="text-xs">
+              Audit Trail ({auditEvents.length})
+            </TabsTrigger>
           </TabsList>
 
-          {/* TAB 1: OVERVIEW */}
-          <TabsContent value="overview" className="space-y-6 pt-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Document Metadata Card */}
-              <Card className="lg:col-span-2 bg-slate-900/60 border-slate-800">
+          {/* 1. OVERVIEW TAB */}
+          <TabsContent value="overview" className="space-y-6 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="bg-slate-900/60 border-slate-800">
                 <CardHeader>
                   <CardTitle className="text-sm font-bold text-white">Cryptographic Hashes & Integrity</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                      Original Upload SHA-256 Hash
+                <CardContent className="space-y-3 text-xs">
+                  <div>
+                    <span className="text-slate-400 block mb-0.5">Original File Hash (SHA-256):</span>
+                    <span className="font-mono text-[11px] text-slate-200 bg-slate-950 p-2 rounded block border border-slate-800 break-all">
+                      {document.original_hash || 'SHA-256 Hash Generated on Initialization'}
                     </span>
-                    <code className="text-xs text-slate-300 font-mono break-all">{document.original_hash}</code>
                   </div>
-
-                  <div className="p-3.5 bg-slate-950 rounded-xl border border-emerald-900/40 space-y-1">
-                    <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5" /> Final Tamper-Evident SHA-256 Hash
+                  <div>
+                    <span className="text-slate-400 block mb-0.5">Final Executed Hash (SHA-256):</span>
+                    <span className="font-mono text-[11px] text-emerald-400 bg-slate-950 p-2 rounded block border border-slate-800 break-all">
+                      {document.final_hash || 'Will be stamped upon completion'}
                     </span>
-                    <code className="text-xs text-emerald-300 font-mono break-all">{document.final_hash}</code>
-                  </div>
-
-                  <div className="p-3.5 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-400 space-y-1 leading-relaxed">
-                    <div className="font-bold text-slate-200">South African ECTA 25 of 2002 Legal Force:</div>
-                    Under Section 11 and Section 15 of the Electronic Communications and Transactions Act, this electronic
-                    record holds full legal recognition and evidential presumption of integrity.
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Quick Actions Card */}
               <Card className="bg-slate-900/60 border-slate-800">
                 <CardHeader>
-                  <CardTitle className="text-sm font-bold text-white">Public Verification</CardTitle>
+                  <CardTitle className="text-sm font-bold text-white">Instant Download & Verification</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4 text-center">
-                  <div className="w-32 h-32 mx-auto bg-white p-2 rounded-xl shadow-lg flex items-center justify-center">
-                    <QrCode className="w-28 h-28 text-slate-900" />
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    Scan or visit the public verification portal to inspect tamper evidence.
+                <CardContent className="space-y-3 text-xs">
+                  <p className="text-slate-300">
+                    Download the stamped PDF document with individual digital signature approval boxes and the South African ECTA Completion Certificate at any time.
                   </p>
-                  <Link href={`/verify/${document.id}`} target="_blank" className="block">
-                    <Button variant="outline" size="sm" className="w-full text-xs border-slate-700">
-                      Open Verification Portal <ExternalLink className="w-3 h-3 ml-1.5" />
-                    </Button>
-                  </Link>
+                  <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                    <a href={`/api/documents/${docId}/download`} target="_blank" download className="flex-1">
+                      <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-xs font-bold">
+                        <Download className="w-3.5 h-3.5 mr-1.5" /> Download Full Signed PDF
+                      </Button>
+                    </a>
+                    <a href={`/api/documents/${docId}/download?type=certificate`} target="_blank" download className="flex-1">
+                      <Button variant="outline" className="w-full text-xs border-slate-700">
+                        <FileText className="w-3.5 h-3.5 mr-1.5 text-cyan-400" /> Certificate Only
+                      </Button>
+                    </a>
+                  </div>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
 
-          {/* TAB 2: RECIPIENTS */}
-          <TabsContent value="recipients" className="space-y-4 pt-4">
+          {/* 2. RECIPIENTS / SIGNATORIES TAB */}
+          <TabsContent value="recipients" className="space-y-4 pt-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {document.recipients.map((r, i) => (
-                <Card key={r.id} className="bg-slate-900/60 border-slate-800">
-                  <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle className="text-sm text-white font-bold">{r.name}</CardTitle>
-                      <p className="text-xs text-slate-400 font-mono">{r.email}</p>
-                    </div>
-                    <Badge variant={r.status === 'signed' ? 'success' : 'default'}>
-                      {r.status.toUpperCase()}
-                    </Badge>
-                  </CardHeader>
-                  <CardContent className="space-y-3 pt-2 text-xs">
-                    <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 space-y-1">
-                      <div className="text-slate-400">
-                        Role: <strong className="text-slate-200">{r.role}</strong>
+              {recipients.map((r, i) => (
+                <Card key={r.id || i} className="bg-slate-900/60 border-slate-800">
+                  <CardContent className="p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-cyan-400 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                          #{i + 1}
+                        </div>
+                        <div>
+                          <div className="font-bold text-sm text-white">{r.name}</div>
+                          <div className="text-[11px] font-mono text-slate-400">{r.email}</div>
+                        </div>
                       </div>
-                      <div className="text-slate-400">
-                        Auth Method: <strong className="text-slate-200">{r.auth_method}</strong>
-                      </div>
-                      <div className="text-slate-400">
-                        Signed: <strong className="text-emerald-400 font-mono">{formatSaDateTime(r.signed_at)}</strong>
-                      </div>
-                      <div className="text-slate-400 font-mono">
-                        IP: <span className="text-slate-300">{r.ip_address}</span>
-                      </div>
+                      <Badge variant={r.status === 'signed' ? 'success' : 'default'}>
+                        {r.status === 'signed' ? 'Signed' : 'Pending Signature'}
+                      </Badge>
                     </div>
 
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleCopySigningLink(r.token)}
-                      className="w-full text-xs text-indigo-400 hover:text-indigo-300 border border-slate-800"
-                    >
-                      <Copy className="w-3.5 h-3.5 mr-1" />
-                      {copiedLink ? 'Signing Link Copied!' : 'Copy Secure Signing Link'}
-                    </Button>
+                    <div className="p-3 bg-slate-950 rounded-xl border border-slate-800/80 text-xs space-y-1">
+                      <div className="flex justify-between text-slate-400">
+                        <span>Role:</span>
+                        <span className="font-semibold text-slate-200 capitalize">{r.role || 'Signer'}</span>
+                      </div>
+                      {r.phone && (
+                        <div className="flex justify-between text-slate-400">
+                          <span>Phone:</span>
+                          <span className="font-mono text-slate-200">{r.phone}</span>
+                        </div>
+                      )}
+                      {r.signed_at && (
+                        <div className="flex justify-between text-slate-400">
+                          <span>Signed Date:</span>
+                          <span className="text-emerald-400 font-mono">{formatSaDateTime(r.signed_at)}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {r.token && (
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[11px] text-slate-400">Signer Direct Link:</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleCopySigningLink(r.token, i)}
+                          className="text-xs text-indigo-400 hover:text-indigo-300 h-7"
+                        >
+                          {copiedLinkIndex === i ? (
+                            <span className="text-emerald-400 flex items-center gap-1">
+                              <Check className="w-3 h-3" /> Copied!
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              <Copy className="w-3 h-3" /> Copy Link
+                            </span>
+                          )}
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
             </div>
           </TabsContent>
 
-          {/* TAB 3: AUDIT TRAIL */}
-          <TabsContent value="audit" className="space-y-4 pt-4">
+          {/* 3. AUDIT TRAIL TAB */}
+          <TabsContent value="audit" className="space-y-4 pt-2">
             <Card className="bg-slate-900/60 border-slate-800">
-              <CardHeader className="border-b border-slate-800 pb-4">
-                <CardTitle className="text-sm text-white font-bold">
-                  Immutable Cryptographic Audit Trail (Append-Only)
-                </CardTitle>
-              </CardHeader>
               <CardContent className="p-0">
-                <div className="divide-y divide-slate-800/60">
-                  {document.audit_events.map((ev) => (
-                    <div key={ev.id} className="p-4 flex items-start gap-3 hover:bg-slate-800/20">
-                      <div className="w-2 h-2 rounded-full bg-indigo-500 mt-2 shrink-0" />
-                      <div className="flex-1 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-200 font-mono">{ev.event_type}</span>
-                          <span className="text-slate-500 font-mono">{formatSaDateTime(ev.created_at)}</span>
-                        </div>
-                        <p className="text-slate-400 mt-1">{ev.description}</p>
-                        <span className="text-[10px] text-slate-500 font-mono">Actor: {ev.actor}</span>
-                      </div>
-                    </div>
-                  ))}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-950/60 text-[11px] uppercase tracking-wider text-slate-400 font-semibold border-b border-slate-800">
+                      <tr>
+                        <th className="py-3 px-6">Timestamp (SAST)</th>
+                        <th className="py-3 px-6">Event Type</th>
+                        <th className="py-3 px-6">Description</th>
+                        <th className="py-3 px-6">IP / Actor</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {auditEvents.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="py-6 text-center text-slate-500">
+                            No audit trail recorded yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        auditEvents.map((ev, i) => (
+                          <tr key={ev.id || i} className="hover:bg-slate-800/30">
+                            <td className="py-3 px-6 font-mono text-slate-300">
+                              {formatSaDateTime(ev.created_at)}
+                            </td>
+                            <td className="py-3 px-6">
+                              <Badge variant="outline" className="font-mono text-[10px]">
+                                {ev.event_type}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-6 text-slate-200">{ev.description}</td>
+                            <td className="py-3 px-6 font-mono text-slate-400 text-[11px]">
+                              {ev.ip_address || ev.actor_type || 'System'}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </CardContent>
             </Card>

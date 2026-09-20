@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbQuery } from '@/lib/db';
-import { stampAndFlattenPdf } from '@/lib/pdf/engine';
+import { stampAndFlattenPdf, createServerSamplePdf } from '@/lib/pdf/engine';
 import { generateSignatureCertificate, appendCertificateToPdf } from '@/lib/pdf/certificate';
-import { createDefaultSamplePdf } from '@/lib/pdf/pdf-browser';
 import { DocumentField, SignatureRecord, Recipient, AuditEvent } from '@/types';
 
 export async function GET(
@@ -22,9 +21,8 @@ export async function GET(
 
     const doc = docRes.rows[0];
 
-    // Generate or fetch canonical document buffer
-    const sample = await createDefaultSamplePdf();
-    const pdfBuffer = Buffer.from(sample.buffer);
+    // Generate or fetch canonical document buffer purely on the server
+    const pdfBuffer = await createServerSamplePdf();
 
     // 2. Fetch Fields, Signatures, Recipients, and Audit Events
     let fields: DocumentField[] = [];
@@ -46,33 +44,9 @@ export async function GET(
       auditEvents = auditRes.rows;
     }
 
-    // 3. Stamp and Flatten PDF
-    const stampedResult = await stampAndFlattenPdf({
-      pdfBuffer,
-      fields,
-      signatures,
-    });
-
-    // 4. Generate Official ECTA Signature Certificate
-    const certificateBuffer = await generateSignatureCertificate({
-      document: doc || {
-        id,
-        org_id: '11111111-1111-1111-1111-111111111111',
-        title: 'Master Services Agreement (SLA)',
-        original_filename: 'service_agreement.pdf',
-        original_mime_type: 'application/pdf',
-        storage_path_original: '',
-        storage_path_pdf: '',
-        page_count: 2,
-        status: 'completed',
-        signing_order_enforced: false,
-        reminder_interval_days: 3,
-        pades_signature_applied: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        final_hash: stampedResult.finalHash,
-      },
-      recipients: recipients.length > 0 ? recipients : [
+    // If no recipients in DB (e.g. testing), provide standard 2 signatories
+    if (recipients.length === 0) {
+      recipients = [
         {
           id: 'r-1',
           document_id: id,
@@ -101,7 +75,37 @@ export async function GET(
           ip_address: '197.97.100.88 (George, ZA)',
           created_at: new Date().toISOString(),
         },
-      ],
+      ];
+    }
+
+    // 3. Stamp, Flatten, and draw Digital Signature approval boxes
+    const stampedResult = await stampAndFlattenPdf({
+      pdfBuffer,
+      fields,
+      signatures,
+      recipients,
+    });
+
+    // 4. Generate Official ECTA Signature Certificate
+    const certificateBuffer = await generateSignatureCertificate({
+      document: doc || {
+        id,
+        org_id: '11111111-1111-1111-1111-111111111111',
+        title: 'Master Services Agreement (SLA)',
+        original_filename: 'service_agreement.pdf',
+        original_mime_type: 'application/pdf',
+        storage_path_original: '',
+        storage_path_pdf: '',
+        page_count: 2,
+        status: doc?.status || 'completed',
+        signing_order_enforced: false,
+        reminder_interval_days: 3,
+        pades_signature_applied: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        final_hash: stampedResult.finalHash,
+      },
+      recipients,
       auditEvents: auditEvents.length > 0 ? auditEvents : [
         {
           id: 'ev-1',
@@ -116,29 +120,22 @@ export async function GET(
           document_id: id,
           actor_type: 'recipient',
           event_type: 'signature.affixed',
-          description: 'Johan Van Der Merwe gave ECTA consent and affixed signature.',
+          description: 'Signatories gave ECTA Section 13 consent and affixed digital signatures.',
           created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-        },
-        {
-          id: 'ev-3',
-          document_id: id,
-          actor_type: 'system',
-          event_type: 'document.completed',
-          description: 'All signers signed. Final PDF sealed and Certificate appended.',
-          created_at: new Date().toISOString(),
         },
       ],
       baseUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunaposgeorge.co.za',
     });
 
     let finalResponseBuffer: Buffer;
-    let filename = `${doc?.title || 'Signed_Document'}.pdf`;
+    const cleanTitle = (doc?.title || 'Signed_Agreement').replace(/[^a-zA-Z0-9._-]/g, '_');
+    let filename = `${cleanTitle}.pdf`;
 
     if (downloadType === 'certificate') {
       finalResponseBuffer = certificateBuffer;
-      filename = `Signature_Certificate_${id}.pdf`;
+      filename = `Certificate_${cleanTitle}.pdf`;
     } else {
-      // Append certificate to the final signed PDF
+      // Append certificate to the stamped PDF
       finalResponseBuffer = await appendCertificateToPdf(stampedResult.finalPdfBuffer, certificateBuffer);
     }
 
@@ -146,7 +143,7 @@ export async function GET(
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}"`,
+        'Content-Disposition': `attachment; filename="${filename}"`,
       },
     });
   } catch (err: unknown) {

@@ -200,6 +200,30 @@ export async function POST(req: NextRequest) {
         token: rawToken,
       });
 
+      // Auto-add or update signee in company customer list / address book
+      try {
+        const contactEmail = r.email.toLowerCase().trim();
+        const existingContact = await dbQuery(
+          `SELECT id FROM contacts WHERE org_id = $1 AND LOWER(email) = $2 LIMIT 1`,
+          [orgId, contactEmail]
+        );
+        if (existingContact.rows.length === 0) {
+          await dbQuery(
+            `INSERT INTO contacts (org_id, name, email, phone, role)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [orgId, r.name.trim(), contactEmail, r.phone || null, r.role || 'signer']
+          );
+        } else {
+          await dbQuery(
+            `UPDATE contacts SET name = $1, phone = COALESCE($2, phone), role = $3, updated_at = NOW()
+             WHERE id = $4 AND org_id = $5`,
+            [r.name.trim(), r.phone || null, r.role || 'signer', existingContact.rows[0].id, orgId]
+          );
+        }
+      } catch (cErr) {
+        console.warn('Auto-save contact warning:', cErr);
+      }
+
       // Send Email Invitation to first recipient or all if non-sequential
       if (!validated.signingOrderEnforced || i === 0) {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sign.lunaposgeorge.co.za';

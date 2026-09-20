@@ -54,7 +54,7 @@ export function FieldRenderer({
   
   // Dynamic auto font size based on field dimensions if not overridden
   const heightVal = Number(field.height_pct) || 3.5;
-  const autoFontSize = Math.max(9, Math.min(16, Math.round(heightVal * 2.8)));
+  const autoFontSize = Math.max(9, Math.min(24, Math.round(heightVal * 3.2)));
   const effectiveFontSize = customFontSize ? `${customFontSize}px` : `${autoFontSize}px`;
 
   // Strict Arial font family with pure crisp black font color for all filled lines
@@ -62,6 +62,7 @@ export function FieldRenderer({
     fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif',
     fontSize: effectiveFontSize,
     color: '#000000',
+    lineHeight: '1.2',
   };
 
   // Validation warnings
@@ -79,31 +80,31 @@ export function FieldRenderer({
   const renderIcon = () => {
     switch (field.type) {
       case 'signature':
-        return <PenTool className="w-3 h-3" />;
+        return <PenTool className="w-3.5 h-3.5 shrink-0" />;
       case 'initials':
-        return <Type className="w-3 h-3" />;
+        return <Type className="w-3.5 h-3.5 shrink-0" />;
       case 'full_name':
-        return <User className="w-3 h-3" />;
+        return <User className="w-3.5 h-3.5 shrink-0" />;
       case 'email':
-        return <Mail className="w-3 h-3" />;
+        return <Mail className="w-3.5 h-3.5 shrink-0" />;
       case 'date_signed':
       case 'date_picker':
-        return <Calendar className="w-3 h-3" />;
+        return <Calendar className="w-3.5 h-3.5 shrink-0" />;
       case 'currency':
-        return <DollarSign className="w-3 h-3" />;
+        return <DollarSign className="w-3.5 h-3.5 shrink-0" />;
       case 'sa_id':
-        return <CreditCard className="w-3 h-3" />;
+        return <CreditCard className="w-3.5 h-3.5 shrink-0" />;
       case 'sa_vat':
-        return <Building className="w-3 h-3" />;
+        return <Building className="w-3.5 h-3.5 shrink-0" />;
       case 'checkbox':
-        return <CheckSquare className="w-3 h-3" />;
+        return <CheckSquare className="w-3.5 h-3.5 shrink-0" />;
       case 'dropdown':
       case 'radio':
-        return <List className="w-3 h-3" />;
+        return <List className="w-3.5 h-3.5 shrink-0" />;
       case 'attachment':
-        return <Paperclip className="w-3 h-3" />;
+        return <Paperclip className="w-3.5 h-3.5 shrink-0" />;
       default:
-        return <FileText className="w-3 h-3" />;
+        return <FileText className="w-3.5 h-3.5 shrink-0" />;
     }
   };
 
@@ -123,19 +124,19 @@ export function FieldRenderer({
           ...arialFontStyle,
         }}
       >
-        <span className="flex items-center gap-1 font-bold truncate text-[11px] text-slate-950">
+        <span className="flex items-center gap-1 font-bold truncate text-slate-950" style={{ fontSize: effectiveFontSize }}>
           <span style={{ color: recipientColor }}>{renderIcon()}</span>
           <span className="truncate">{field.label || field.type.toUpperCase()}</span>
           {field.required && <span className="text-red-600 font-bold ml-0.5">*</span>}
         </span>
-        <span className="truncate text-[10px] font-medium text-slate-600 ml-1 hidden sm:inline">
+        <span className="truncate font-medium text-slate-600 ml-1 hidden sm:inline" style={{ fontSize: `max(8px, calc(${effectiveFontSize} - 2px))` }}>
           {recipient ? recipient.name.split(' ')[0] : 'Sender'}
         </span>
       </div>
     );
   }
 
-  // 2. In Signer Mode: Interactive inputs with pure Arial font
+  // 2. In Signer Mode: Interactive inputs with pure Arial font & adjusted font size
   switch (field.type) {
     case 'signature':
     case 'initials':
@@ -158,13 +159,13 @@ export function FieldRenderer({
                 className="max-h-full max-w-full object-contain filter drop-shadow"
               />
             ) : (
-              <span className="font-dancing-script text-lg text-indigo-300 select-none">
+              <span className="font-dancing-script text-lg text-indigo-300 select-none" style={{ fontSize: effectiveFontSize }}>
                 {signatureData || value}
               </span>
             )
           ) : (
-            <div className="flex items-center gap-1 text-[11px] font-semibold" style={arialFontStyle}>
-              <PenTool className="w-3 h-3" />
+            <div className="flex items-center gap-1 font-semibold" style={arialFontStyle}>
+              <PenTool className="w-3.5 h-3.5 shrink-0" />
               <span>Click to {field.type === 'initials' ? 'Initial' : 'Sign'}</span>
             </div>
           )}
@@ -181,7 +182,7 @@ export function FieldRenderer({
             isChecked ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-900 border-slate-700 hover:border-slate-500'
           )}
         >
-          {isChecked && <span className="font-bold text-xs">✓</span>}
+          {isChecked && <span className="font-bold" style={{ fontSize: effectiveFontSize }}>✓</span>}
         </div>
       );
 
@@ -193,7 +194,7 @@ export function FieldRenderer({
             placeholder="R 0,00"
             value={value}
             onChange={(e) => onChange?.(e.target.value)}
-            style={{ ...arialFontStyle, color: '#000000', backgroundColor: '#ffffff' }}
+            style={{ ...arialFontStyle, fontSize: effectiveFontSize, color: '#000000', backgroundColor: '#ffffff' }}
             className="w-full h-full px-1.5 py-0 rounded border border-slate-400 bg-white text-black font-semibold focus:ring-1 focus:ring-indigo-600 outline-none leading-none shadow-sm placeholder:text-slate-400"
           />
         </div>
@@ -208,7 +209,7 @@ export function FieldRenderer({
             placeholder="13-digit SA ID"
             value={value}
             onChange={(e) => onChange?.(e.target.value.replace(/\D/g, ''))}
-            style={{ ...arialFontStyle, color: '#000000', backgroundColor: '#ffffff' }}
+            style={{ ...arialFontStyle, fontSize: effectiveFontSize, color: '#000000', backgroundColor: '#ffffff' }}
             className={cn(
               'w-full h-full px-1.5 py-0 rounded border bg-white text-black font-semibold focus:outline-none focus:ring-1 leading-none shadow-sm placeholder:text-slate-400',
               validationError ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-400 focus:ring-indigo-600'
@@ -231,7 +232,7 @@ export function FieldRenderer({
             placeholder="4XXXXXXXXX"
             value={value}
             onChange={(e) => onChange?.(e.target.value.replace(/\D/g, ''))}
-            style={{ ...arialFontStyle, color: '#000000', backgroundColor: '#ffffff' }}
+            style={{ ...arialFontStyle, fontSize: effectiveFontSize, color: '#000000', backgroundColor: '#ffffff' }}
             className={cn(
               'w-full h-full px-1.5 py-0 rounded border bg-white text-black font-semibold focus:outline-none focus:ring-1 leading-none shadow-sm placeholder:text-slate-400',
               validationError ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-400 focus:ring-indigo-600'
@@ -243,11 +244,11 @@ export function FieldRenderer({
     case 'date_signed':
       return (
         <div
-          style={{ ...arialFontStyle, color: '#000000', backgroundColor: '#ffffff' }}
+          style={{ ...arialFontStyle, fontSize: effectiveFontSize, color: '#000000', backgroundColor: '#ffffff' }}
           className="w-full h-full px-1.5 py-0 rounded border border-slate-400 bg-white text-black font-semibold flex items-center justify-between shadow-sm"
         >
-          <span className="truncate">{value || formatSaDate(new Date())}</span>
-          <Calendar className="w-3 h-3 text-slate-700 shrink-0 ml-1" />
+          <span className="truncate" style={{ fontSize: effectiveFontSize }}>{value || formatSaDate(new Date())}</span>
+          <Calendar className="w-3.5 h-3.5 text-slate-700 shrink-0 ml-1" />
         </div>
       );
 
@@ -257,7 +258,7 @@ export function FieldRenderer({
         <select
           value={value}
           onChange={(e) => onChange?.(e.target.value)}
-          style={{ ...arialFontStyle, color: '#000000', backgroundColor: '#ffffff' }}
+          style={{ ...arialFontStyle, fontSize: effectiveFontSize, color: '#000000', backgroundColor: '#ffffff' }}
           className="w-full h-full px-1 py-0 rounded border border-slate-400 bg-white text-black font-semibold focus:ring-1 focus:ring-indigo-600 outline-none leading-none shadow-sm"
         >
           <option value="">Select...</option>
@@ -277,7 +278,7 @@ export function FieldRenderer({
           value={value}
           onChange={(e) => onChange?.(e.target.value)}
           readOnly={field.read_only}
-          style={{ ...arialFontStyle, color: '#000000', backgroundColor: '#ffffff' }}
+          style={{ ...arialFontStyle, fontSize: effectiveFontSize, color: '#000000', backgroundColor: '#ffffff' }}
           className="w-full h-full px-1.5 py-0 rounded border border-slate-400 bg-white text-black font-semibold focus:ring-1 focus:ring-indigo-600 outline-none leading-none shadow-sm placeholder:text-slate-400"
         />
       );

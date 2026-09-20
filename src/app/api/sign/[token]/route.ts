@@ -173,6 +173,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       ]
     );
 
+    // Auto-save signer into company contacts / customer list
+    try {
+      if (recipient.doc_org_id) {
+        const contactEmail = recipient.email.toLowerCase().trim();
+        const existingContact = await dbQuery(
+          `SELECT id FROM contacts WHERE org_id = $1 AND LOWER(email) = $2 LIMIT 1`,
+          [recipient.doc_org_id, contactEmail]
+        );
+        if (existingContact.rows.length === 0) {
+          await dbQuery(
+            `INSERT INTO contacts (org_id, name, email, role)
+             VALUES ($1, $2, $3, $4)`,
+            [recipient.doc_org_id, recipient.name.trim(), contactEmail, recipient.role || 'signer']
+          );
+        } else {
+          await dbQuery(
+            `UPDATE contacts SET name = $1, role = $2, updated_at = NOW()
+             WHERE id = $3 AND org_id = $4`,
+            [recipient.name.trim(), recipient.role || 'signer', existingContact.rows[0].id, recipient.doc_org_id]
+          );
+        }
+      }
+    } catch (cErr) {
+      console.warn('Auto-save signer to contacts warning:', cErr);
+    }
+
     // 6. Send Signed Confirmation Email
     emailService
       .sendSignedConfirmation({

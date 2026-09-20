@@ -129,15 +129,17 @@ export function FieldConfigDialog({
                 onChange={(e) => setFontSize(e.target.value)}
                 className="mt-1 w-full h-9 px-2 rounded-lg border border-slate-700 bg-slate-950 text-slate-100 text-xs focus:ring-1 focus:ring-indigo-500 outline-none font-sans"
               >
-                <option value="auto">Auto Fit</option>
+                <option value="auto">Auto Fit (Proportional)</option>
                 <option value="8">8 pt</option>
                 <option value="9">9 pt</option>
                 <option value="10">10 pt</option>
                 <option value="11">11 pt</option>
-                <option value="12">12 pt</option>
+                <option value="12">12 pt (Standard)</option>
                 <option value="14">14 pt</option>
                 <option value="16">16 pt</option>
                 <option value="18">18 pt</option>
+                <option value="20">20 pt</option>
+                <option value="24">24 pt (Heading)</option>
               </select>
             </div>
 
