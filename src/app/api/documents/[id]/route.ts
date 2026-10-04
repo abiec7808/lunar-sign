@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbQuery } from '@/lib/db';
 import { getAuthenticatedUserWithOrg } from '@/lib/auth/session';
 import { emailService } from '@/lib/email/service';
-import { parseFieldOptions } from '@/lib/utils';
+import { parseFieldOptions, getSmartFieldOptions } from '@/lib/utils';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -51,7 +51,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const sanitizedFields = fieldsRes.rows.map((f: any) => ({
       ...f,
-      options: f.options ? parseFieldOptions(f.options) : undefined,
+      options: (f.type === 'dropdown' || f.type === 'radio')
+        ? getSmartFieldOptions(f)
+        : (f.options ? parseFieldOptions(f.options) : undefined),
     }));
 
     return NextResponse.json({

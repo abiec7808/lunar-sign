@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { DocumentField, Recipient } from '@/types';
-import { cn, getRecipientTheme, parseFieldOptions } from '@/lib/utils';
+import { cn, getRecipientTheme, parseFieldOptions, getSmartFieldOptions } from '@/lib/utils';
 import { validateSaId } from '@/lib/compliance/sa-id';
 import { validateSaVat } from '@/lib/compliance/sa-vat';
 import { formatSaDate } from '@/lib/dates';
@@ -120,7 +120,7 @@ export function FieldRenderer({
 
     let optionsSummary = '';
     if (field.type === 'dropdown' || field.type === 'radio') {
-      const opts = parseFieldOptions(field.options);
+      const opts = getSmartFieldOptions(field);
       if (opts.length > 0) {
         optionsSummary = opts.join(', ');
       }
@@ -357,8 +357,7 @@ export function FieldRenderer({
       );
 
     case 'dropdown': {
-      const parsedOptions = parseFieldOptions(field.options);
-      const displayOptions = parsedOptions.length > 0 ? parsedOptions : ['Option 1', 'Option 2', 'Option 3'];
+      const displayOptions = getSmartFieldOptions(field);
 
       return (
         <select

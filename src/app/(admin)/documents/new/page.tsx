@@ -15,7 +15,7 @@ import { FieldPalette } from '@/components/editor/FieldPalette';
 import { InteractivePdfCanvas } from '@/components/editor/InteractivePdfCanvas';
 import { FieldConfigDialog } from '@/components/editor/FieldConfigDialog';
 import { DocumentField, Recipient, FieldType, RecipientRole, RecipientAuthMethod } from '@/types';
-import { getRecipientColor, getRecipientTheme, parseFieldOptions } from '@/lib/utils';
+import { getRecipientColor, getRecipientTheme, parseFieldOptions, getSmartFieldOptions } from '@/lib/utils';
 import { renderPdfPagesFromBuffer, createDefaultSamplePdf, RenderedPage } from '@/lib/pdf/pdf-browser';
 import {
   Upload,
@@ -260,7 +260,7 @@ function NewDocumentContent() {
                   return {
                     ...f,
                     id: f.id || `f-${Date.now()}-${fIdx}`,
-                    options: f.options ? parseFieldOptions(f.options) : (f.type === 'dropdown' || f.type === 'radio' ? ['Option 1', 'Option 2', 'Option 3'] : undefined),
+                    options: f.options ? getSmartFieldOptions(f) : (f.type === 'dropdown' || f.type === 'radio' ? getSmartFieldOptions(f) : undefined),
                     recipient_id: targetRecipId,
                   };
                 });
@@ -459,7 +459,7 @@ function NewDocumentContent() {
     } else if (type === 'dropdown' || type === 'radio') {
       defaultWidth = 28;
       defaultHeight = 3.5;
-      defaultOptions = ['Option 1', 'Option 2', 'Option 3'];
+      defaultOptions = getSmartFieldOptions({ type: 'dropdown', label: 'Type of Account' });
     }
 
     const newField: DocumentField = {
@@ -509,7 +509,7 @@ function NewDocumentContent() {
       setIsSavingTemplate(true);
       const sanitizedFields = fields.map((f) => ({
         ...f,
-        options: f.options ? parseFieldOptions(f.options) : (f.type === 'dropdown' || f.type === 'radio' ? ['Option 1', 'Option 2', 'Option 3'] : undefined),
+        options: f.options ? getSmartFieldOptions(f) : (f.type === 'dropdown' || f.type === 'radio' ? getSmartFieldOptions(f) : undefined),
       }));
       const res = await fetch(`/api/templates/${templateId}`, {
         method: 'PUT',
@@ -557,7 +557,7 @@ function NewDocumentContent() {
       setIsSavingTemplate(true);
       const sanitizedFields = fields.map((f) => ({
         ...f,
-        options: f.options ? parseFieldOptions(f.options) : (f.type === 'dropdown' || f.type === 'radio' ? ['Option 1', 'Option 2', 'Option 3'] : undefined),
+        options: f.options ? getSmartFieldOptions(f) : (f.type === 'dropdown' || f.type === 'radio' ? getSmartFieldOptions(f) : undefined),
       }));
 
       if (templateId && !forceNew) {
@@ -655,7 +655,7 @@ function NewDocumentContent() {
             const idx = recipients.findIndex((r) => r.id === f.recipient_id);
             rIndex = idx >= 0 ? idx : null;
           }
-          const cleanOpts = f.options ? parseFieldOptions(f.options) : (f.type === 'dropdown' || f.type === 'radio' ? ['Option 1', 'Option 2', 'Option 3'] : undefined);
+          const cleanOpts = f.options ? getSmartFieldOptions(f) : (f.type === 'dropdown' || f.type === 'radio' ? getSmartFieldOptions(f) : undefined);
           return {
             type: f.type,
             page: Number(f.page) || 1,
@@ -1332,8 +1332,7 @@ function NewDocumentContent() {
                             >
                               <option value="">{field.placeholder || 'Select an option...'}</option>
                               {(() => {
-                                const parsedOpts = parseFieldOptions(field.options);
-                                const displayOpts = parsedOpts.length > 0 ? parsedOpts : ['Option 1', 'Option 2', 'Option 3'];
+                                const displayOpts = getSmartFieldOptions(field);
                                 return displayOpts.map((opt, i) => (
                                   <option key={i} value={opt}>
                                     {opt}

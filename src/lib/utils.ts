@@ -129,4 +129,51 @@ export function parseFieldOptions(rawOptions: any): string[] {
   return [];
 }
 
+export const BANK_ACCOUNT_TYPE_OPTIONS = [
+  'Current Account',
+  'Cheque Account',
+  'Savings Account',
+  'Transmission Account',
+];
 
+export const DEBIT_ORDER_DATE_OPTIONS = [
+  '1st',
+  '7th',
+  '15th',
+  '25th',
+];
+
+export function getSmartFieldOptions(fieldOrOptions: any, labelHint?: string): string[] {
+  let raw = fieldOrOptions;
+  let label = labelHint || '';
+  if (fieldOrOptions && typeof fieldOrOptions === 'object' && !Array.isArray(fieldOrOptions)) {
+    raw = fieldOrOptions.options;
+    label = fieldOrOptions.label || labelHint || '';
+  }
+
+  const parsed = parseFieldOptions(raw);
+  const isGeneric = parsed.length > 0 && parsed.every((opt, i) => opt.toLowerCase() === `option ${i + 1}`);
+
+  if (parsed.length > 0 && !isGeneric) {
+    return parsed;
+  }
+
+  const l = label.toLowerCase();
+  if (l.includes('account') || l.includes('bank') || l.includes('type of acc')) {
+    return BANK_ACCOUNT_TYPE_OPTIONS;
+  }
+  if (l.includes('date') || l.includes('day') || l.includes('debit') || l.includes('payment') || l.includes('deduct')) {
+    return DEBIT_ORDER_DATE_OPTIONS;
+  }
+  if (l.includes('province')) {
+    return ['Gauteng', 'Western Cape', 'KwaZulu-Natal', 'Eastern Cape', 'Free State', 'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape'];
+  }
+  if (l.includes('title') || l.includes('salutation')) {
+    return ['Mr', 'Mrs', 'Ms', 'Miss', 'Dr', 'Prof'];
+  }
+  if (l.includes('yes') || l.includes('agree') || l.includes('consent')) {
+    return ['Yes', 'No'];
+  }
+
+  return parsed.length > 0 ? parsed : BANK_ACCOUNT_TYPE_OPTIONS;
+}

@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { DocumentField, Recipient } from '@/types';
-import { parseFieldOptions } from '@/lib/utils';
+import { parseFieldOptions, getSmartFieldOptions } from '@/lib/utils';
 import {
   Trash2,
   Check,
@@ -85,9 +85,7 @@ export function FieldConfigDialog({
 
       // Initialize dropdown options from field
       if (field.type === 'dropdown' || field.type === 'radio') {
-        const loadedOpts = parseFieldOptions(field.options);
-        const initialOpts = loadedOpts.length > 0 ? loadedOpts : ['Option 1', 'Option 2', 'Option 3'];
-
+        const initialOpts = getSmartFieldOptions(field, field.label || undefined);
         setOptions(initialOpts);
         setBulkOptionsText(initialOpts.join('\n'));
       } else {
@@ -185,10 +183,8 @@ export function FieldConfigDialog({
       ? workingOptions.map((o) => o.trim()).filter((o) => o.length > 0)
       : undefined;
 
-    const finalOptions = cleanOptions && cleanOptions.length > 0 
-      ? cleanOptions 
-      : isDropdownOrRadio 
-      ? ['Option 1', 'Option 2', 'Option 3'] 
+    const finalOptions = isDropdownOrRadio
+      ? getSmartFieldOptions(cleanOptions && cleanOptions.length > 0 ? cleanOptions : undefined, label)
       : undefined;
 
     onUpdateField({

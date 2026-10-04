@@ -6,7 +6,7 @@ import { generateSecureToken, hashSigningToken, sha256Hex } from '@/lib/security
 import { convertToPdf } from '@/lib/conversion';
 import { emailService } from '@/lib/email/service';
 import { formatSaDate } from '@/lib/dates';
-import { parseFieldOptions } from '@/lib/utils';
+import { parseFieldOptions, getSmartFieldOptions } from '@/lib/utils';
 
 const CreateDocumentSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -288,7 +288,9 @@ export async function POST(req: NextRequest) {
         mappedRecipId = recipientIdMap.get(f.recipientIndex) || null;
       }
 
-      const parsedOpts = f.options ? parseFieldOptions(f.options) : [];
+      const parsedOpts = (f.type === 'dropdown' || f.type === 'radio')
+        ? getSmartFieldOptions(f)
+        : (f.options ? parseFieldOptions(f.options) : []);
 
       await dbQuery(
         `INSERT INTO fields (
