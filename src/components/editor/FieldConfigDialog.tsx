@@ -38,9 +38,11 @@ interface FieldConfigDialogProps {
 }
 
 const PRESET_OPTIONS: { name: string; options: string[] }[] = [
+  { name: 'Bank Account Types', options: ['Current Account', 'Cheque Account', 'Savings Account', 'Transmission Account'] },
+  { name: 'Debit Order Dates', options: ['1st of Month', '7th of Month', '15th of Month', '25th of Month', 'Last Day of Month'] },
+  { name: 'Days (1st, 7th, 15th...)', options: ['1st', '7th', '15th', '20th', '25th', 'Last Day'] },
   { name: 'Yes / No / N/A', options: ['Yes', 'No', 'Not Applicable'] },
   { name: 'SA Provinces', options: ['Gauteng', 'Western Cape', 'KwaZulu-Natal', 'Eastern Cape', 'Free State', 'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape'] },
-  { name: 'Approval Status', options: ['Approved', 'Pending Review', 'Rejected'] },
   { name: 'Payment Terms', options: ['Immediate', 'Net 15 Days', 'Net 30 Days', 'Net 60 Days'] },
   { name: 'Title / Salutation', options: ['Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.'] },
 ];

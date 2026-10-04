@@ -507,13 +507,17 @@ function NewDocumentContent() {
     if (!templateId) return;
     try {
       setIsSavingTemplate(true);
+      const sanitizedFields = fields.map((f) => ({
+        ...f,
+        options: f.options ? parseFieldOptions(f.options) : (f.type === 'dropdown' || f.type === 'radio' ? ['Option 1', 'Option 2', 'Option 3'] : undefined),
+      }));
       const res = await fetch(`/api/templates/${templateId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: templateName.trim() || docTitle.trim(),
           description: templateDescription.trim() || docMessage.trim(),
-          fields,
+          fields: sanitizedFields,
           recipientRoles: recipients.map((r, i) => ({
             role: r.role || 'signer',
             label: r.name || `Signer ${i + 1}`,
@@ -551,6 +555,10 @@ function NewDocumentContent() {
 
     try {
       setIsSavingTemplate(true);
+      const sanitizedFields = fields.map((f) => ({
+        ...f,
+        options: f.options ? parseFieldOptions(f.options) : (f.type === 'dropdown' || f.type === 'radio' ? ['Option 1', 'Option 2', 'Option 3'] : undefined),
+      }));
 
       if (templateId && !forceNew) {
         // Update existing template
@@ -560,7 +568,7 @@ function NewDocumentContent() {
           body: JSON.stringify({
             name: templateName.trim(),
             description: templateDescription.trim() || `Custom template for ${templateName.trim()}`,
-            fields,
+            fields: sanitizedFields,
             recipientRoles: recipients.map((r, i) => ({
               role: r.role || 'signer',
               label: `Signer ${i + 1}`,
@@ -587,7 +595,7 @@ function NewDocumentContent() {
         body: JSON.stringify({
           name: templateName.trim(),
           description: templateDescription.trim() || `Custom template for ${templateName.trim()}`,
-          fields,
+          fields: sanitizedFields,
           recipientRoles: recipients.map((r, i) => ({
             role: r.role || 'signer',
             label: `Signer ${i + 1}`,
@@ -647,6 +655,7 @@ function NewDocumentContent() {
             const idx = recipients.findIndex((r) => r.id === f.recipient_id);
             rIndex = idx >= 0 ? idx : null;
           }
+          const cleanOpts = f.options ? parseFieldOptions(f.options) : (f.type === 'dropdown' || f.type === 'radio' ? ['Option 1', 'Option 2', 'Option 3'] : undefined);
           return {
             type: f.type,
             page: Number(f.page) || 1,
@@ -658,7 +667,7 @@ function NewDocumentContent() {
             label: f.label || f.type,
             placeholder: f.placeholder || '',
             value: f.value || f.default_value || undefined,
-            options: f.options || undefined,
+            options: cleanOpts,
             validation_rule: f.validation_rule || undefined,
             recipientIndex: rIndex,
           };
