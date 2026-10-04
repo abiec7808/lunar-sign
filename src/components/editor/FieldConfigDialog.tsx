@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { DocumentField, Recipient } from '@/types';
+import { parseFieldOptions } from '@/lib/utils';
 import {
   Trash2,
   Check,
@@ -82,22 +83,11 @@ export function FieldConfigDialog({
 
       // Initialize dropdown options from field
       if (field.type === 'dropdown' || field.type === 'radio') {
-        let loadedOpts: string[] = [];
-        if (Array.isArray(field.options) && field.options.length > 0) {
-          loadedOpts = field.options;
-        } else if (typeof field.options === 'string') {
-          try {
-            const parsed = JSON.parse(field.options);
-            if (Array.isArray(parsed) && parsed.length > 0) loadedOpts = parsed;
-          } catch (e) {}
-        }
+        const loadedOpts = parseFieldOptions(field.options);
+        const initialOpts = loadedOpts.length > 0 ? loadedOpts : ['Option 1', 'Option 2', 'Option 3'];
 
-        if (loadedOpts.length === 0) {
-          loadedOpts = ['Option 1', 'Option 2', 'Option 3'];
-        }
-
-        setOptions(loadedOpts);
-        setBulkOptionsText(loadedOpts.join('\n'));
+        setOptions(initialOpts);
+        setBulkOptionsText(initialOpts.join('\n'));
       } else {
         setOptions([]);
         setBulkOptionsText('');

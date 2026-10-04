@@ -6,6 +6,7 @@ import { generateSecureToken, hashSigningToken, sha256Hex } from '@/lib/security
 import { convertToPdf } from '@/lib/conversion';
 import { emailService } from '@/lib/email/service';
 import { formatSaDate } from '@/lib/dates';
+import { parseFieldOptions } from '@/lib/utils';
 
 const CreateDocumentSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -37,7 +38,7 @@ const CreateDocumentSchema = z.object({
       label: z.string().optional(),
       placeholder: z.string().optional(),
       value: z.string().optional(),
-      options: z.array(z.string()).optional().nullable(),
+      options: z.union([z.array(z.string()), z.string()]).optional().nullable(),
       validation_rule: z.record(z.string(), z.unknown()).optional().nullable(),
       recipientIndex: z.number().nullable(), // null = sender field
     })
@@ -269,6 +270,8 @@ export async function POST(req: NextRequest) {
         mappedRecipId = recipientIdMap.get(f.recipientIndex) || null;
       }
 
+      const parsedOpts = f.options ? parseFieldOptions(f.options) : [];
+
       await dbQuery(
         `INSERT INTO fields (
           document_id, recipient_id, type, page, x_pct, y_pct, width_pct, height_pct,
@@ -287,7 +290,7 @@ export async function POST(req: NextRequest) {
           f.label || f.type,
           f.placeholder || null,
           f.value || null,
-          f.options ? JSON.stringify(f.options) : null,
+          parsedOpts.length > 0 ? JSON.stringify(parsedOpts) : null,
           f.validation_rule ? JSON.stringify(f.validation_rule) : null,
         ]
       );

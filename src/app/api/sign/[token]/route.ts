@@ -5,6 +5,7 @@ import { hashSigningToken } from '@/lib/security/crypto';
 import { emailService } from '@/lib/email/service';
 import { formatSaDateTime } from '@/lib/dates';
 import { dispatchWebhook } from '@/lib/webhooks';
+import { parseFieldOptions } from '@/lib/utils';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   try {
@@ -72,6 +73,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       dbQuery(`SELECT s.* FROM signatures s JOIN fields f ON s.field_id = f.id WHERE f.document_id = $1`, [r.doc_id]),
     ]);
 
+    const sanitizedFields = fieldsRes.rows.map((f: any) => ({
+      ...f,
+      options: f.options ? parseFieldOptions(f.options) : undefined,
+    }));
+
     return NextResponse.json({
       recipient: {
         id: r.id,
@@ -94,7 +100,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         signingOrderEnforced: r.doc_signing_order_enforced,
         pdfBase64: r.doc_pdf_base64 || null,
       },
-      fields: fieldsRes.rows,
+      fields: sanitizedFields,
       isWaitingForPreviousSigner,
       previousSignerName,
       previousSignerOrder,

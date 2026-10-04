@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbQuery } from '@/lib/db';
 import { getAuthenticatedUserWithOrg } from '@/lib/auth/session';
+import { parseFieldOptions } from '@/lib/utils';
 
 /**
  * GET /api/templates/[id] - Fetch template details
@@ -79,6 +80,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const cleanFields = Array.isArray(fields)
         ? fields.map((f: any) => ({
             ...f,
+            options: f.options ? parseFieldOptions(f.options) : (f.type === 'dropdown' || f.type === 'radio' ? ['Option 1', 'Option 2', 'Option 3'] : undefined),
             value: f.type === 'text' && (f.label?.toLowerCase() === 'signature') ? '' : f.value,
           }))
         : [];

@@ -86,3 +86,47 @@ export function getRecipientColor(index: number): string {
   return RECIPIENT_THEMES[index % RECIPIENT_THEMES.length].primary;
 }
 
+export function parseFieldOptions(rawOptions: any): string[] {
+  if (!rawOptions) return [];
+  if (Array.isArray(rawOptions)) {
+    return rawOptions
+      .map((o) => (typeof o === 'string' ? o.trim() : String(o || '').trim()))
+      .filter((o) => o.length > 0);
+  }
+  if (typeof rawOptions === 'string') {
+    let str = rawOptions.trim();
+    if (!str) return [];
+    // Unwrap nested stringified JSON if present
+    for (let depth = 0; depth < 3; depth++) {
+      if ((str.startsWith('"') && str.endsWith('"')) || (str.startsWith("'") && str.endsWith("'"))) {
+        try {
+          const unquoted = JSON.parse(str);
+          if (typeof unquoted === 'string') str = unquoted.trim();
+          else if (Array.isArray(unquoted)) return parseFieldOptions(unquoted);
+          else break;
+        } catch (e) {
+          str = str.slice(1, -1).trim();
+        }
+      } else {
+        break;
+      }
+    }
+    try {
+      const parsed = JSON.parse(str);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((o) => (typeof o === 'string' ? o.trim() : String(o || '').trim()))
+          .filter((o) => o.length > 0);
+      }
+    } catch (e) {}
+
+    // Fallback: parse delimiter-separated list (newline or comma)
+    return str
+      .split(/\r?\n|,/)
+      .map((s) => s.replace(/^[\[\]"']+|[\[\]"']+$/g, '').trim())
+      .filter((s) => s.length > 0);
+  }
+  return [];
+}
+
+

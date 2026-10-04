@@ -15,7 +15,7 @@ import { FieldPalette } from '@/components/editor/FieldPalette';
 import { InteractivePdfCanvas } from '@/components/editor/InteractivePdfCanvas';
 import { FieldConfigDialog } from '@/components/editor/FieldConfigDialog';
 import { DocumentField, Recipient, FieldType, RecipientRole, RecipientAuthMethod } from '@/types';
-import { getRecipientColor, getRecipientTheme } from '@/lib/utils';
+import { getRecipientColor, getRecipientTheme, parseFieldOptions } from '@/lib/utils';
 import { renderPdfPagesFromBuffer, createDefaultSamplePdf, RenderedPage } from '@/lib/pdf/pdf-browser';
 import {
   Upload,
@@ -260,6 +260,7 @@ function NewDocumentContent() {
                   return {
                     ...f,
                     id: f.id || `f-${Date.now()}-${fIdx}`,
+                    options: f.options ? parseFieldOptions(f.options) : (f.type === 'dropdown' || f.type === 'radio' ? ['Option 1', 'Option 2', 'Option 3'] : undefined),
                     recipient_id: targetRecipId,
                   };
                 });
@@ -1318,15 +1319,15 @@ function NewDocumentContent() {
                               className="w-full h-9 px-2 bg-white text-black font-semibold border border-slate-300 rounded-lg text-xs shadow-sm cursor-pointer"
                             >
                               <option value="">{field.placeholder || 'Select an option...'}</option>
-                              {((Array.isArray(field.options) && field.options.length > 0 
-                                ? field.options 
-                                : typeof field.options === 'string' 
-                                ? (() => { try { return JSON.parse(field.options); } catch (e) { return ['Option 1', 'Option 2', 'Option 3']; } })() 
-                                : ['Option 1', 'Option 2', 'Option 3']) as string[]).map((opt, i) => (
-                                <option key={i} value={opt}>
-                                  {opt}
-                                </option>
-                              ))}
+                              {(() => {
+                                const parsedOpts = parseFieldOptions(field.options);
+                                const displayOpts = parsedOpts.length > 0 ? parsedOpts : ['Option 1', 'Option 2', 'Option 3'];
+                                return displayOpts.map((opt, i) => (
+                                  <option key={i} value={opt}>
+                                    {opt}
+                                  </option>
+                                ));
+                              })()}
                             </select>
                           ) : (
                             <Input

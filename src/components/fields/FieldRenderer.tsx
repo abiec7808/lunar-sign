@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { DocumentField, Recipient } from '@/types';
-import { cn, getRecipientTheme } from '@/lib/utils';
+import { cn, getRecipientTheme, parseFieldOptions } from '@/lib/utils';
 import { validateSaId } from '@/lib/compliance/sa-id';
 import { validateSaVat } from '@/lib/compliance/sa-vat';
 import { formatSaDate } from '@/lib/dates';
@@ -120,15 +120,7 @@ export function FieldRenderer({
 
     let optionsSummary = '';
     if (field.type === 'dropdown' || field.type === 'radio') {
-      let opts: string[] = [];
-      if (Array.isArray(field.options) && field.options.length > 0) {
-        opts = field.options;
-      } else if (typeof field.options === 'string') {
-        try {
-          const parsed = JSON.parse(field.options);
-          if (Array.isArray(parsed)) opts = parsed;
-        } catch (e) {}
-      }
+      const opts = parseFieldOptions(field.options);
       if (opts.length > 0) {
         optionsSummary = opts.join(', ');
       }
@@ -153,8 +145,8 @@ export function FieldRenderer({
           <span style={{ color: recipientTheme.primary }}>{renderIcon()}</span>
           <span className="truncate text-slate-900">{field.label || field.type.toUpperCase()}</span>
           {optionsSummary && (
-            <span className="text-[9px] text-slate-600 font-normal truncate max-w-[120px] hidden sm:inline">
-              ({optionsSummary})
+            <span className="text-[10px] text-slate-800 font-semibold truncate max-w-[220px] ml-1 px-1.5 py-0.2 bg-white/80 rounded border border-slate-300 shadow-xs">
+              ▼ {optionsSummary}
             </span>
           )}
           {field.required && <span className="text-red-600 font-bold ml-0.5">*</span>}
@@ -359,15 +351,8 @@ export function FieldRenderer({
       );
 
     case 'dropdown': {
-      let parsedOptions: string[] = ['Option 1', 'Option 2', 'Option 3'];
-      if (Array.isArray(field.options) && field.options.length > 0) {
-        parsedOptions = field.options;
-      } else if (typeof field.options === 'string') {
-        try {
-          const parsed = JSON.parse(field.options);
-          if (Array.isArray(parsed) && parsed.length > 0) parsedOptions = parsed;
-        } catch (e) {}
-      }
+      const parsedOptions = parseFieldOptions(field.options);
+      const displayOptions = parsedOptions.length > 0 ? parsedOptions : ['Option 1', 'Option 2', 'Option 3'];
 
       return (
         <select
@@ -377,7 +362,7 @@ export function FieldRenderer({
           className="w-full h-full px-1 py-0 rounded border border-slate-400 bg-white text-black font-semibold focus:ring-1 focus:ring-indigo-600 outline-none leading-none shadow-sm cursor-pointer"
         >
           <option value="">{field.placeholder || 'Select an option...'}</option>
-          {parsedOptions.map((opt, i) => (
+          {displayOptions.map((opt, i) => (
             <option key={i} value={opt}>
               {opt}
             </option>
