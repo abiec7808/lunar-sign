@@ -31,6 +31,8 @@ import {
   Link2,
   MessageCircle,
   Send,
+  Mail,
+  Loader2,
 } from 'lucide-react';
 import { formatSaDateTime, formatSaDate } from '@/lib/dates';
 
@@ -98,6 +100,31 @@ export default function DocumentDetailPage() {
     const url = `${origin}/s/${tokenOrId}`;
     const text = encodeURIComponent(`Hello${signerName ? ' ' + signerName : ''}, please review and sign "${document.title}" electronically here: ${url}`);
     window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  const [resendingRecipId, setResendingRecipId] = useState<string | null>(null);
+
+  const handleResendEmail = async (recipientId: string, recipientName?: string) => {
+    try {
+      setResendingRecipId(recipientId);
+      const res = await fetch(`/api/documents/${docId}/remind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipientId, type: 'signature_request' }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || `Signature request email resent to ${recipientName || 'recipient'} successfully!`);
+        await loadDoc();
+      } else {
+        alert(data.error || 'Failed to resend signature request email.');
+      }
+    } catch (err) {
+      console.error('Failed to resend email:', err);
+      alert('An error occurred while dispatching signature request email.');
+    } finally {
+      setResendingRecipId(null);
+    }
   };
 
   const handleArchiveToggle = async (archive: boolean) => {
@@ -483,6 +510,24 @@ export default function DocumentDetailPage() {
                       >
                         <MessageCircle className="w-3.5 h-3.5 mr-1" /> WhatsApp
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleResendEmail(r.id, r.name)}
+                        disabled={isActionLoading || resendingRecipId === r.id || r.status === 'signed'}
+                        className="text-xs h-8 px-3 border-cyan-500/40 text-cyan-400 hover:bg-cyan-950/40 font-semibold"
+                        title="Resend Signature Request Email"
+                      >
+                        {resendingRecipId === r.id ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="w-3.5 h-3.5 mr-1" /> Resend Email
+                          </>
+                        )}
+                      </Button>
                     </div>
                   </div>
                 );
@@ -631,6 +676,21 @@ export default function DocumentDetailPage() {
                             title="Share on WhatsApp"
                           >
                             <MessageCircle className="w-3.5 h-3.5 mr-1" /> WhatsApp
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleResendEmail(r.id, r.name)}
+                            disabled={isActionLoading || resendingRecipId === r.id}
+                            className="text-xs text-cyan-400 hover:text-cyan-300 h-7"
+                            title="Resend Signature Request Email"
+                          >
+                            {resendingRecipId === r.id ? (
+                              <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                            ) : (
+                              <Mail className="w-3.5 h-3.5 mr-1" />
+                            )}
+                            Resend Email
                           </Button>
                         </div>
                       )}

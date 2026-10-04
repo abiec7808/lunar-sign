@@ -12,7 +12,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const { recipientId } = body;
+    const { recipientId, type = 'signature_request' } = body;
 
     const auth = await getAuthenticatedUserWithOrg();
     const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     let sentCount = 0;
 
     for (const r of recipsRes.rows) {
-      // Issue fresh token for the reminder and extend expiration
+      // Issue fresh token for the signing link and extend expiration
       const rawToken = generateSecureToken();
       const tokenHash = hashSigningToken(rawToken);
       const tokenExpiresAt = new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString();
@@ -82,16 +82,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       const signingUrl = `${appUrl}/s/${r.id}`;
 
-      const sent = await emailService.sendReminder({
-        to: r.email,
-        recipientName: r.name,
-        senderName: effectiveSenderName,
-        documentTitle: doc.title,
-        signingUrl,
-        expiresAtFormatted,
-        documentId: doc.id,
-        recipientId: r.id,
-      });
+      let sent = false;
+      if (type === 'reminder') {
+        sent = await emailService.sendReminder({
+          to: r.email,
+          recipientName: r.name,
+          senderName: effectiveSenderName,
+          documentTitle: doc.title,
+          signingUrl,
+          expiresAtFormatted,
+          documentId: doc.id,
+          recipientId: r.id,
+          force: true,
+        });
+      } else {
+        sent = await emailService.sendSignatureRequest({
+          to: r.email,
+          recipientName: r.name,
+          senderName: effectiveSenderName,
+          documentTitle: doc.title,
+          message: doc.message,
+          signingUrl,
+          expiresAtFormatted,
+          documentId: doc.id,
+          recipientId: r.id,
+          force: true,
+        });
+      }
 
       if (sent) {
         sentCount++;
@@ -101,7 +118,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           [
             doc.id,
             r.id,
-            `Manual signature reminder email dispatched by ${effectiveSenderName} to ${r.name} (${r.email}).`,
+            `Signature ${type === 'reminder' ? 'reminder' : 'request'} email dispatched by ${effectiveSenderName} to ${r.name} (${r.email}).`,
           ]
         );
       }
@@ -112,9 +129,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       [doc.id]
     );
 
+    if (sentCount === 0) {
+      return NextResponse.json({
+        error: 'Failed to dispatch email. Please check SMTP/Resend settings or try again.',
+      }, { status: 500 });
+    }
+
     return NextResponse.json({
       success: true,
-      message: `Successfully sent ${sentCount} reminder email(s).`,
+      message: `Successfully sent signature request email to ${recipsRes.rows[0]?.name || recipsRes.rows[0]?.email}.`,
     });
   } catch (err: any) {
     console.error('Error sending reminder:', err);

@@ -238,28 +238,27 @@ export async function POST(req: NextRequest) {
         console.warn('Auto-save contact warning:', cErr);
       }
 
-      // Send Email Invitation to first recipient or all if non-sequential
-      if (!validated.signingOrderEnforced || i === 0) {
-        const { getAppUrl } = await import('@/lib/url');
-        const appUrl = getAppUrl(req, orgCustomDomain);
-        const signingUrl = `${appUrl}/s/${recipId}`;
+      // Send Email Invitation to all recipients immediately
+      const { getAppUrl } = await import('@/lib/url');
+      const appUrl = getAppUrl(req, orgCustomDomain);
+      const signingUrl = `${appUrl}/s/${recipId}`;
 
-        try {
-          await emailService.sendSignatureRequest({
-            to: r.email,
-            recipientName: r.name,
-            senderName,
-            documentTitle: validated.title,
-            message: validated.message,
-            signingUrl,
-            expiresAtFormatted: formatSaDate(tokenExpiresAt),
-            documentId: doc.id,
-            recipientId: recipId,
-          });
-          console.log(`[POST /api/documents] Dispatched signature request to ${r.email}`);
-        } catch (err) {
-          console.error(`Error sending email to ${r.email}:`, err);
-        }
+      try {
+        await emailService.sendSignatureRequest({
+          to: r.email,
+          recipientName: r.name,
+          senderName,
+          documentTitle: validated.title,
+          message: validated.message,
+          signingUrl,
+          expiresAtFormatted: formatSaDate(tokenExpiresAt),
+          documentId: doc.id,
+          recipientId: recipId,
+          force: true,
+        });
+        console.log(`[POST /api/documents] Dispatched signature request to ${r.email}`);
+      } catch (err) {
+        console.error(`Error sending email to ${r.email}:`, err);
       }
     }
 

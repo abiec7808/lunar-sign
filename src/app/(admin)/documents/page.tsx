@@ -49,6 +49,8 @@ import {
   ArrowUp,
   ArrowDown,
   LayoutTemplate,
+  Mail,
+  Loader2,
 } from 'lucide-react';
 import { formatSaDate } from '@/lib/dates';
 import { EctaExclusionsModal } from '@/components/admin/EctaExclusionsModal';
@@ -367,6 +369,34 @@ export default function DocumentsListPage() {
     const url = `${origin}/s/${recipientIdOrDocId}`;
     const text = encodeURIComponent(`Hello${signerName ? ' ' + signerName : ''}, please review and sign "${docTitle}" electronically here: ${url}`);
     window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  const [resendingKey, setResendingKey] = useState<string | null>(null);
+
+  const handleResendEmail = async (docId: string, recipientId?: string, recipientName?: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const key = `${docId}-${recipientId || 'all'}`;
+    try {
+      setResendingKey(key);
+      const res = await fetch(`/api/documents/${docId}/remind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipientId, type: 'signature_request' }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setNotification(`✉️ ${data.message || `Signature request email resent to ${recipientName || 'recipient'} successfully!`}`);
+        setTimeout(() => setNotification(null), 4000);
+        await loadDocuments();
+      } else {
+        alert(data.error || 'Failed to resend signature request email.');
+      }
+    } catch (err) {
+      console.error('Failed to resend email:', err);
+      alert('An error occurred while dispatching email.');
+    } finally {
+      setResendingKey(null);
+    }
   };
 
   const handleArchiveToggle = async (id: string, title: string, archive: boolean) => {
@@ -735,6 +765,20 @@ export default function DocumentsListPage() {
                                       title="Share via WhatsApp"
                                     >
                                       <MessageCircle className="w-3 h-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={(e) => handleResendEmail(doc.id, recip.id, recip.name, e)}
+                                      disabled={actionLoading || resendingKey === `${doc.id}-${recip.id}` || recip.status === 'signed'}
+                                      className="h-5 w-5 p-0 text-cyan-400 hover:text-cyan-200 hover:bg-cyan-950/40 disabled:opacity-30"
+                                      title="Resend Sign Request via Email"
+                                    >
+                                      {resendingKey === `${doc.id}-${recip.id}` ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      ) : (
+                                        <Mail className="w-3 h-3" />
+                                      )}
                                     </Button>
                                   </div>
                                 </div>
@@ -1259,6 +1303,24 @@ export default function DocumentsListPage() {
                         title="Share on WhatsApp"
                       >
                         <MessageCircle className="w-3 h-3 mr-1" /> WhatsApp
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleResendEmail(directSuccessData.documentId, r.id, r.name)}
+                        disabled={actionLoading || resendingKey === `${directSuccessData.documentId}-${r.id}`}
+                        className="text-xs h-7 px-2.5 border-cyan-500/40 text-cyan-400 hover:bg-cyan-950/40 font-semibold"
+                        title="Resend Signature Request Email"
+                      >
+                        {resendingKey === `${directSuccessData.documentId}-${r.id}` ? (
+                          <>
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="w-3 h-3 mr-1" /> Resend Email
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>

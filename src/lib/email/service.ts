@@ -17,17 +17,18 @@ export interface SendEmailOptions {
   documentId?: string;
   recipientId?: string;
   templateName: string;
+  force?: boolean;
 }
 
 export interface IEmailService {
   sendEmail(options: SendEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }>;
-  sendSignatureRequest(props: SignatureRequestEmailProps & { to: string; documentId: string; recipientId: string }): Promise<boolean>;
-  sendDocumentCompleted(props: DocumentCompletedEmailProps & { to: string; documentId: string; recipientId?: string }): Promise<boolean>;
-  sendSignedConfirmation(props: SignedConfirmationEmailProps & { to: string; documentId: string; recipientId: string }): Promise<boolean>;
-  sendReminder(props: ReminderEmailProps & { to: string; documentId: string; recipientId: string }): Promise<boolean>;
-  sendDeclined(props: DeclinedEmailProps & { to: string; documentId: string }): Promise<boolean>;
-  sendVoided(props: VoidedEmailProps & { to: string; documentId: string; recipientId?: string }): Promise<boolean>;
-  sendNewRegistrationAlert(props: NewRegistrationAlertEmailProps & { to?: string }): Promise<boolean>;
+  sendSignatureRequest(props: SignatureRequestEmailProps & { to: string; documentId: string; recipientId: string; force?: boolean }): Promise<boolean>;
+  sendDocumentCompleted(props: DocumentCompletedEmailProps & { to: string; documentId: string; recipientId?: string; force?: boolean }): Promise<boolean>;
+  sendSignedConfirmation(props: SignedConfirmationEmailProps & { to: string; documentId: string; recipientId: string; force?: boolean }): Promise<boolean>;
+  sendReminder(props: ReminderEmailProps & { to: string; documentId: string; recipientId: string; force?: boolean }): Promise<boolean>;
+  sendDeclined(props: DeclinedEmailProps & { to: string; documentId: string; force?: boolean }): Promise<boolean>;
+  sendVoided(props: VoidedEmailProps & { to: string; documentId: string; recipientId?: string; force?: boolean }): Promise<boolean>;
+  sendNewRegistrationAlert(props: NewRegistrationAlertEmailProps & { to?: string; force?: boolean }): Promise<boolean>;
 }
 
 export class ResendEmailService implements IEmailService {
@@ -138,7 +139,7 @@ export class ResendEmailService implements IEmailService {
     }
   }
 
-  async sendSignatureRequest(props: SignatureRequestEmailProps & { to: string; documentId: string; recipientId: string }): Promise<boolean> {
+  async sendSignatureRequest(props: SignatureRequestEmailProps & { to: string; documentId: string; recipientId: string; force?: boolean }): Promise<boolean> {
     const res = await this.sendEmail({
       to: props.to,
       subject: `Signature Requested: ${props.documentTitle}`,
@@ -146,11 +147,12 @@ export class ResendEmailService implements IEmailService {
       documentId: props.documentId,
       recipientId: props.recipientId,
       templateName: 'signature_request',
+      force: props.force,
     });
     return res.success;
   }
 
-  async sendDocumentCompleted(props: DocumentCompletedEmailProps & { to: string; documentId: string; recipientId?: string }): Promise<boolean> {
+  async sendDocumentCompleted(props: DocumentCompletedEmailProps & { to: string; documentId: string; recipientId?: string; force?: boolean }): Promise<boolean> {
     const res = await this.sendEmail({
       to: props.to,
       subject: `Completed: ${props.documentTitle}`,
@@ -158,11 +160,12 @@ export class ResendEmailService implements IEmailService {
       documentId: props.documentId,
       recipientId: props.recipientId,
       templateName: 'document_completed',
+      force: props.force,
     });
     return res.success;
   }
 
-  async sendSignedConfirmation(props: SignedConfirmationEmailProps & { to: string; documentId: string; recipientId: string }): Promise<boolean> {
+  async sendSignedConfirmation(props: SignedConfirmationEmailProps & { to: string; documentId: string; recipientId: string; force?: boolean }): Promise<boolean> {
     const res = await this.sendEmail({
       to: props.to,
       subject: `Signature Confirmed: ${props.documentTitle}`,
@@ -170,11 +173,12 @@ export class ResendEmailService implements IEmailService {
       documentId: props.documentId,
       recipientId: props.recipientId,
       templateName: 'signed_confirmation',
+      force: props.force,
     });
     return res.success;
   }
 
-  async sendReminder(props: ReminderEmailProps & { to: string; documentId: string; recipientId: string }): Promise<boolean> {
+  async sendReminder(props: ReminderEmailProps & { to: string; documentId: string; recipientId: string; force?: boolean }): Promise<boolean> {
     const res = await this.sendEmail({
       to: props.to,
       subject: `Reminder: Please sign ${props.documentTitle}`,
@@ -182,22 +186,24 @@ export class ResendEmailService implements IEmailService {
       documentId: props.documentId,
       recipientId: props.recipientId,
       templateName: 'reminder',
+      force: props.force,
     });
     return res.success;
   }
 
-  async sendDeclined(props: DeclinedEmailProps & { to: string; documentId: string }): Promise<boolean> {
+  async sendDeclined(props: DeclinedEmailProps & { to: string; documentId: string; force?: boolean }): Promise<boolean> {
     const res = await this.sendEmail({
       to: props.to,
       subject: `Declined: ${props.documentTitle}`,
       reactElement: React.createElement(DeclinedEmail, props),
       documentId: props.documentId,
       templateName: 'declined',
+      force: props.force,
     });
     return res.success;
   }
 
-  async sendVoided(props: VoidedEmailProps & { to: string; documentId: string; recipientId?: string }): Promise<boolean> {
+  async sendVoided(props: VoidedEmailProps & { to: string; documentId: string; recipientId?: string; force?: boolean }): Promise<boolean> {
     const res = await this.sendEmail({
       to: props.to,
       subject: `Document Voided: ${props.documentTitle}`,
@@ -205,17 +211,19 @@ export class ResendEmailService implements IEmailService {
       documentId: props.documentId,
       recipientId: props.recipientId,
       templateName: 'voided',
+      force: props.force,
     });
     return res.success;
   }
 
-  async sendNewRegistrationAlert(props: NewRegistrationAlertEmailProps & { to?: string }): Promise<boolean> {
+  async sendNewRegistrationAlert(props: NewRegistrationAlertEmailProps & { to?: string; force?: boolean }): Promise<boolean> {
     const recipient = props.to || 'admin@lunarposgeorge.co.za';
     const res = await this.sendEmail({
       to: recipient,
       subject: `🚀 New Business Registration: ${props.businessName} (Approval Needed)`,
       reactElement: React.createElement(NewRegistrationAlertEmail, props),
       templateName: 'super_admin_registration_alert',
+      force: props.force,
     });
     return res.success;
   }
@@ -261,8 +269,8 @@ export class DirectSmtpEmailService implements IEmailService {
     const { to, subject, reactElement, documentId, recipientId, templateName } = options;
 
     try {
-      // Check if sent to this exact recipient in the last 2 minutes to protect cPanel hourly failure limit
-      if (documentId && recipientId) {
+      // Check if sent to this exact recipient in the last 2 minutes to protect cPanel hourly failure limit (bypass if force is true)
+      if (documentId && recipientId && !options.force) {
         try {
           const { dbQuery } = await import('@/lib/db');
           const recentRes = await dbQuery(
@@ -374,7 +382,7 @@ export class DirectSmtpEmailService implements IEmailService {
     }
   }
 
-  async sendSignatureRequest(props: SignatureRequestEmailProps & { to: string; documentId: string; recipientId: string }): Promise<boolean> {
+  async sendSignatureRequest(props: SignatureRequestEmailProps & { to: string; documentId: string; recipientId: string; force?: boolean }): Promise<boolean> {
     const res = await this.sendEmail({
       to: props.to,
       subject: `Signature Requested: ${props.documentTitle}`,
@@ -382,11 +390,12 @@ export class DirectSmtpEmailService implements IEmailService {
       documentId: props.documentId,
       recipientId: props.recipientId,
       templateName: 'signature_request',
+      force: props.force,
     });
     return res.success;
   }
 
-  async sendDocumentCompleted(props: DocumentCompletedEmailProps & { to: string; documentId: string; recipientId?: string }): Promise<boolean> {
+  async sendDocumentCompleted(props: DocumentCompletedEmailProps & { to: string; documentId: string; recipientId?: string; force?: boolean }): Promise<boolean> {
     const res = await this.sendEmail({
       to: props.to,
       subject: `Completed: ${props.documentTitle}`,
@@ -394,11 +403,12 @@ export class DirectSmtpEmailService implements IEmailService {
       documentId: props.documentId,
       recipientId: props.recipientId,
       templateName: 'document_completed',
+      force: props.force,
     });
     return res.success;
   }
 
-  async sendSignedConfirmation(props: SignedConfirmationEmailProps & { to: string; documentId: string; recipientId: string }): Promise<boolean> {
+  async sendSignedConfirmation(props: SignedConfirmationEmailProps & { to: string; documentId: string; recipientId: string; force?: boolean }): Promise<boolean> {
     const res = await this.sendEmail({
       to: props.to,
       subject: `Signature Confirmed: ${props.documentTitle}`,
@@ -406,11 +416,12 @@ export class DirectSmtpEmailService implements IEmailService {
       documentId: props.documentId,
       recipientId: props.recipientId,
       templateName: 'signed_confirmation',
+      force: props.force,
     });
     return res.success;
   }
 
-  async sendReminder(props: ReminderEmailProps & { to: string; documentId: string; recipientId: string }): Promise<boolean> {
+  async sendReminder(props: ReminderEmailProps & { to: string; documentId: string; recipientId: string; force?: boolean }): Promise<boolean> {
     const res = await this.sendEmail({
       to: props.to,
       subject: `Reminder: Please sign ${props.documentTitle}`,
@@ -418,22 +429,24 @@ export class DirectSmtpEmailService implements IEmailService {
       documentId: props.documentId,
       recipientId: props.recipientId,
       templateName: 'reminder',
+      force: props.force,
     });
     return res.success;
   }
 
-  async sendDeclined(props: DeclinedEmailProps & { to: string; documentId: string }): Promise<boolean> {
+  async sendDeclined(props: DeclinedEmailProps & { to: string; documentId: string; force?: boolean }): Promise<boolean> {
     const res = await this.sendEmail({
       to: props.to,
       subject: `Declined: ${props.documentTitle}`,
       reactElement: React.createElement(DeclinedEmail, props),
       documentId: props.documentId,
       templateName: 'declined',
+      force: props.force,
     });
     return res.success;
   }
 
-  async sendVoided(props: VoidedEmailProps & { to: string; documentId: string; recipientId?: string }): Promise<boolean> {
+  async sendVoided(props: VoidedEmailProps & { to: string; documentId: string; recipientId?: string; force?: boolean }): Promise<boolean> {
     const res = await this.sendEmail({
       to: props.to,
       subject: `Document Voided: ${props.documentTitle}`,
@@ -441,17 +454,19 @@ export class DirectSmtpEmailService implements IEmailService {
       documentId: props.documentId,
       recipientId: props.recipientId,
       templateName: 'voided',
+      force: props.force,
     });
     return res.success;
   }
 
-  async sendNewRegistrationAlert(props: NewRegistrationAlertEmailProps & { to?: string }): Promise<boolean> {
+  async sendNewRegistrationAlert(props: NewRegistrationAlertEmailProps & { to?: string; force?: boolean }): Promise<boolean> {
     const recipient = props.to || 'admin@lunarposgeorge.co.za';
     const res = await this.sendEmail({
       to: recipient,
       subject: `🚀 New Business Registration: ${props.businessName} (Approval Needed)`,
       reactElement: React.createElement(NewRegistrationAlertEmail, props),
       templateName: 'super_admin_registration_alert',
+      force: props.force,
     });
     return res.success;
   }

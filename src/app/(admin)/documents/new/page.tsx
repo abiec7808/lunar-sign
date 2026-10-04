@@ -40,6 +40,8 @@ import {
   Link2,
   MessageCircle,
   CheckCircle2,
+  Mail,
+  Loader2,
 } from 'lucide-react';
 
 function NewDocumentContent() {
@@ -340,6 +342,29 @@ function NewDocumentContent() {
   const [selectedField, setSelectedField] = useState<DocumentField | null>(null);
   const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [resendingRecipId, setResendingRecipId] = useState<string | null>(null);
+
+  const handleResendEmail = async (docId: string, recipientId?: string, recipientName?: string) => {
+    try {
+      setResendingRecipId(recipientId || docId);
+      const res = await fetch(`/api/documents/${docId}/remind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipientId, type: 'signature_request' }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || `Signature request email resent to ${recipientName || 'recipient'} successfully!`);
+      } else {
+        alert(data.error || 'Failed to resend signature request email.');
+      }
+    } catch (err) {
+      console.error('Failed to resend email:', err);
+      alert('An error occurred while dispatching email.');
+    } finally {
+      setResendingRecipId(null);
+    }
+  };
 
   // Recipient Handlers
   const handleAddRecipient = () => {
@@ -1584,6 +1609,24 @@ function NewDocumentContent() {
                         title="Share on WhatsApp"
                       >
                         <MessageCircle className="w-3 h-3 mr-1" /> WhatsApp
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleResendEmail(sentSuccessData.documentId, r.id, r.name)}
+                        disabled={isSending || resendingRecipId === r.id}
+                        className="text-xs h-7 px-2.5 border-cyan-500/40 text-cyan-400 hover:bg-cyan-950/40 font-semibold"
+                        title="Resend Signature Request Email"
+                      >
+                        {resendingRecipId === r.id ? (
+                          <>
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="w-3 h-3 mr-1" /> Resend Email
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
