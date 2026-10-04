@@ -68,77 +68,59 @@ export async function checkAndTriggerSequentialSigners(targetDocId?: string): Pr
 
       const activeRecipient = recips[currentSignerIndex];
 
-      // Check if invitation was already sent in email_log
+      // Check if an email was sent to this recipient in the last 60 seconds to avoid rapid double-sends
       const emailLogRes = await dbQuery(
         `SELECT id, sent_at FROM email_log 
-         WHERE document_id = $1 AND recipient_id = $2 AND status = 'sent'
+         WHERE document_id = $1 AND recipient_id = $2 AND status = 'sent' AND sent_at > NOW() - INTERVAL '60 seconds'
          ORDER BY sent_at DESC LIMIT 1`,
         [doc.id, activeRecipient.id]
       );
 
-      const hasSentRecently = emailLogRes.rows.length > 0;
+      if (emailLogRes.rows.length === 0) {
+        console.log(`[Sequential Engine] Triggering signature invitation for Signer #${currentSignerIndex + 1}: ${activeRecipient.name} (${activeRecipient.email}) on "${doc.title}"`);
 
-      // If never sent or if it's the next signer following a previous signature
-      if (!hasSentRecently || currentSignerIndex > 0) {
-        // Check if there's already an audit event for this recipient's invitation
-        const auditCheck = await dbQuery(
-          `SELECT id FROM audit_events 
-           WHERE document_id = $1 AND recipient_id = $2 AND event_type = 'invitation.sent' LIMIT 1`,
-          [doc.id, activeRecipient.id]
-        );
+        const { getAppUrl } = await import('@/lib/url');
+        const appUrl = getAppUrl(null, doc.custom_domain);
+        const signingUrl = `${appUrl}/s/${activeRecipient.id}`;
+        const effectiveSenderName = doc.creator_name || doc.org_name || 'Lunar Sign Administrator';
+        const tokenExpiresAt = activeRecipient.token_expires_at || new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
 
-        if (auditCheck.rows.length === 0) {
-          console.log(`[Sequential Engine] Triggering email for Signer #${currentSignerIndex + 1}: ${activeRecipient.name} (${activeRecipient.email}) on "${doc.title}"`);
+        try {
+          const sent = await emailService.sendSignatureRequest({
+            to: activeRecipient.email,
+            recipientName: activeRecipient.name,
+            senderName: effectiveSenderName,
+            documentTitle: doc.title,
+            message: doc.message || 'Please review and sign this electronic document.',
+            signingUrl,
+            expiresAtFormatted: formatSaDate(tokenExpiresAt),
+            documentId: doc.id,
+            recipientId: activeRecipient.id,
+            orgName: doc.org_name || 'Lunar Sign',
+            primaryColor: '#4f46e5',
+            force: true,
+          });
 
-          const rawToken = generateSecureToken();
-          const tokenHash = hashSigningToken(rawToken);
-          const tokenExpiresAt = activeRecipient.token_expires_at || new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+          if (sent) {
+            await dbQuery(
+              `INSERT INTO audit_events (document_id, recipient_id, actor_type, event_type, description)
+               VALUES ($1, $2, 'system', 'invitation.sent', $3)`,
+              [
+                doc.id,
+                activeRecipient.id,
+                `Sequential signature invitation dispatched to ${activeRecipient.name} (${activeRecipient.email}). Link: ${signingUrl}`,
+              ]
+            );
 
-          await dbQuery(
-            `UPDATE recipients SET token_hash = $1, token_expires_at = $2 WHERE id = $3`,
-            [tokenHash, tokenExpiresAt, activeRecipient.id]
-          );
-
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://lunar-sign.netlify.app';
-          const signingUrl = `${appUrl}/s/${activeRecipient.id}`;
-          const effectiveSenderName = doc.creator_name || doc.org_name || 'Lunar Sign Administrator';
-
-          try {
-            const sent = await emailService.sendSignatureRequest({
-              to: activeRecipient.email,
-              recipientName: activeRecipient.name,
-              senderName: effectiveSenderName,
-              documentTitle: doc.title,
-              message: doc.message || 'Please review and sign this electronic document.',
-              signingUrl,
-              expiresAtFormatted: formatSaDate(tokenExpiresAt),
+            triggeredSigners.push({
               documentId: doc.id,
               recipientId: activeRecipient.id,
-              orgName: doc.org_name || 'Lunar Sign',
-              primaryColor: '#4f46e5',
+              email: activeRecipient.email,
+              name: activeRecipient.name,
             });
-
-            if (sent) {
-              await dbQuery(
-                `INSERT INTO audit_events (document_id, recipient_id, actor_type, event_type, description)
-                 VALUES ($1, $2, 'system', 'invitation.sent', $3)`,
-                [
-                  doc.id,
-                  activeRecipient.id,
-                  `Sequential signature invitation dispatched to ${activeRecipient.name} (${activeRecipient.email}).`,
-                ]
-              );
-
-              triggeredSigners.push({
-                documentId: doc.id,
-                recipientId: activeRecipient.id,
-                email: activeRecipient.email,
-                name: activeRecipient.name,
-              });
-            }
-          } catch (sendErr) {
-            console.error(`[Sequential Engine Error] Failed to send email to ${activeRecipient.email}:`, sendErr);
           }
+        } catch (sendErr) {
+          console.error(`[Sequential Engine Error] Failed to send email to ${activeRecipient.email}:`, sendErr);
         }
       }
     }

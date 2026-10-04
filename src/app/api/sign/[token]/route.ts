@@ -361,6 +361,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         completedAt: nowIso,
       }).catch(console.error);
     } else {
+      // Update document status to partially_signed
+      await dbQuery(
+        `UPDATE documents SET status = 'partially_signed' WHERE id = $1`,
+        [recipient.doc_id]
+      );
+
       // Trigger the automated sequential engine for this document immediately so the next signer is notified
       try {
         const { checkAndTriggerSequentialSigners } = await import('@/lib/email/sequential-trigger');
