@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { ShieldCheck, Building2, User, Mail, Lock, Phone, FileText, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { ShieldCheck, Building2, User, Mail, Lock, Phone, FileText, ArrowRight, AlertCircle, Sparkles, Eye, EyeOff } from 'lucide-react';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -16,6 +16,7 @@ export default function RegisterPage() {
   const [adminFullName, setAdminFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [phone, setPhone] = useState('+27 ');
   const [vatNumber, setVatNumber] = useState('');
   const [companyRegNumber, setCompanyRegNumber] = useState('');
@@ -184,15 +185,29 @@ export default function RegisterPage() {
 
                 <div>
                   <Label className="text-slate-300 text-xs">Master Password *</Label>
-                  <Input
-                    type="password"
-                    required
-                    minLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Create a strong password (min 6 chars)"
-                    className="mt-1 bg-slate-950 border-slate-700 text-xs"
-                  />
+                  <div className="relative mt-1">
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Create a strong password (min 6 chars)"
+                      className="bg-slate-950 border-slate-700 text-xs pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors focus:outline-none"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
 
