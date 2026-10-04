@@ -242,7 +242,7 @@ export async function POST(req: NextRequest) {
       if (!validated.signingOrderEnforced || i === 0) {
         const { getAppUrl } = await import('@/lib/url');
         const appUrl = getAppUrl(req, orgCustomDomain);
-        const signingUrl = `${appUrl}/s/${rawToken}`;
+        const signingUrl = `${appUrl}/s/${recipId}`;
 
         try {
           await emailService.sendSignatureRequest({
@@ -356,8 +356,8 @@ export async function POST(req: NextRequest) {
         id: r.id,
         name: r.name,
         email: r.email,
-        token: r.token,
-        signingUrl: `/s/${r.token}`,
+        token: r.id,
+        signingUrl: `/s/${r.id}`,
       })),
     });
   } catch (err: unknown) {

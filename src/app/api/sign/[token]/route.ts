@@ -32,7 +32,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     const r = recipRes.rows[0];
 
     // Check expiry
-    if (new Date(r.token_expires_at).getTime() < Date.now()) {
+    if (r.token_expires_at && new Date(r.token_expires_at).getTime() < Date.now()) {
       return NextResponse.json({ error: 'This signing link has expired.' }, { status: 410 });
     }
 

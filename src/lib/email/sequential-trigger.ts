@@ -100,7 +100,7 @@ export async function checkAndTriggerSequentialSigners(targetDocId?: string): Pr
           );
 
           const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://lunar-sign.netlify.app';
-          const signingUrl = `${appUrl}/s/${rawToken}`;
+          const signingUrl = `${appUrl}/s/${activeRecipient.id}`;
           const effectiveSenderName = doc.creator_name || doc.org_name || 'Lunar Sign Administrator';
 
           try {

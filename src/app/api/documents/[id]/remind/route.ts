@@ -80,7 +80,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         [tokenHash, tokenExpiresAt, r.id]
       );
 
-      const signingUrl = `${appUrl}/s/${rawToken}`;
+      const signingUrl = `${appUrl}/s/${r.id}`;
 
       const sent = await emailService.sendReminder({
         to: r.email,
