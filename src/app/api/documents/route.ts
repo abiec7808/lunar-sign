@@ -269,9 +269,6 @@ export async function POST(req: NextRequest) {
       if (f.recipientIndex !== null && f.recipientIndex !== undefined && f.recipientIndex >= 0) {
         mappedRecipId = recipientIdMap.get(f.recipientIndex) || null;
       }
-      if (!mappedRecipId && (f.type === 'signature' || f.type === 'initials') && insertedRecipients.length > 0) {
-        mappedRecipId = insertedRecipients[0].id;
-      }
 
       await dbQuery(
         `INSERT INTO fields (

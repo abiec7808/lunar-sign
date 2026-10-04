@@ -175,10 +175,15 @@ export function InteractivePdfCanvas({
       {pageFields.map((field) => {
         const isSelected = selectedFieldId === field.id;
         const recipient = recipients.find((r) => r.id === field.recipient_id);
+        const isMyField = isSignerMode && !!currentRecipient?.id && field.recipient_id === currentRecipient.id;
+        const fieldValue = fieldValues[field.id] || field.value || '';
+        const isUnfilled = isMyField && field.required !== false && (!fieldValue || fieldValue.trim() === '');
+        const isCurrentFocused = isSignerMode && selectedFieldId === field.id;
 
         return (
           <div
             key={field.id}
+            id={`signer-field-${field.id}`}
             onMouseDown={(e) => handleMouseDownMove(e, field)}
             style={{
               position: 'absolute',
@@ -188,10 +193,50 @@ export function InteractivePdfCanvas({
               height: `${field.height_pct}%`,
             }}
             className={cn(
-              'group transition-shadow',
-              !isSignerMode && 'cursor-grab active:cursor-grabbing hover:z-20'
+              'group transition-all duration-200',
+              !isSignerMode && 'cursor-grab active:cursor-grabbing hover:z-20',
+              isSignerMode && isMyField && isUnfilled && !isCurrentFocused && 'ring-2 ring-amber-500/80 shadow-md shadow-amber-500/30 rounded z-20',
+              isSignerMode && isMyField && isCurrentFocused && 'ring-3 ring-indigo-500 shadow-xl shadow-indigo-500/40 rounded z-30 scale-[1.01]'
             )}
           >
+            {/* Pinpoint Marker for Focused Active Field */}
+            {isSignerMode && isMyField && isCurrentFocused && (
+              <div className="absolute -top-9 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex flex-col items-center animate-bounce">
+                <div className="px-2.5 py-1 rounded-full text-[11px] font-black text-white bg-gradient-to-r from-indigo-600 to-cyan-500 shadow-xl shadow-indigo-500/50 border border-cyan-300 flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="w-2 h-2 rounded-full bg-white animate-ping shrink-0" />
+                  <span>
+                    {field.type === 'signature'
+                      ? '✍️ Sign Here (Click to Sign)'
+                      : field.type === 'initials'
+                      ? '✍️ Initial Here'
+                      : field.type === 'dropdown'
+                      ? '👇 Select Option'
+                      : `👉 Fill: ${field.label || 'Required Field'}`}
+                  </span>
+                </div>
+                <div className="w-2.5 h-2.5 bg-cyan-500 rotate-45 -mt-1 shadow-sm" />
+              </div>
+            )}
+
+            {/* Pinpoint Marker for Other Unfilled Required Fields */}
+            {isSignerMode && isMyField && isUnfilled && !isCurrentFocused && (
+              <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center">
+                <div className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-amber-500 shadow-md shadow-amber-500/50 border border-amber-300 flex items-center gap-1 whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
+                  <span>
+                    {field.type === 'signature'
+                      ? '✍️ Required Signature'
+                      : field.type === 'initials'
+                      ? '✍️ Required Initial'
+                      : field.type === 'dropdown'
+                      ? '👇 Required Dropdown'
+                      : '⚠️ Required'}
+                  </span>
+                </div>
+                <div className="w-1.5 h-1.5 bg-amber-500 rotate-45 -mt-1" />
+              </div>
+            )}
+
             <FieldRenderer
               field={field}
               recipient={recipient}

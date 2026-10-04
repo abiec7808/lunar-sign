@@ -185,11 +185,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       [nowIso, ip, userAgent, recipient.id]
     );
 
-    // 3. Save field values into PostgreSQL fields table (ONLY for fields belonging to this recipient or unassigned fields)
+    // 3. Save field values into PostgreSQL fields table (STRICTLY for fields assigned to this recipient)
     for (const [fieldId, val] of Object.entries(validated.fieldValues)) {
       await dbQuery(
         `UPDATE fields SET value = $1, completed_at = NOW()
-         WHERE id::text = $2 AND document_id = $3 AND (recipient_id = $4 OR recipient_id IS NULL)`,
+         WHERE id::text = $2 AND document_id = $3 AND recipient_id = $4`,
         [val, fieldId, recipient.doc_id, recipient.id]
       );
     }
@@ -197,7 +197,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     // 4. Save signatures (STRICTLY for fields assigned to this recipient)
     for (const sig of validated.signatures) {
       const fieldCheck = await dbQuery(
-        `SELECT id FROM fields WHERE id::text = $1 AND document_id = $2 AND (recipient_id = $3 OR recipient_id IS NULL) LIMIT 1`,
+        `SELECT id FROM fields WHERE id::text = $1 AND document_id = $2 AND recipient_id = $3 LIMIT 1`,
         [sig.fieldId, recipient.doc_id, recipient.id]
       );
 

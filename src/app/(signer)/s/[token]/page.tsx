@@ -42,6 +42,7 @@ export default function SignerPortalPage() {
   // Signing UI States
   const [isSigModalOpen, setIsSigModalOpen] = useState(false);
   const [activeSigFieldId, setActiveSigFieldId] = useState<string | null>(null);
+  const [activeFocusedFieldId, setActiveFocusedFieldId] = useState<string | null>(null);
   const [isDeclineModalOpen, setIsDeclineModalOpen] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [isDeclined, setIsDeclined] = useState(false);
@@ -191,6 +192,10 @@ export default function SignerPortalPage() {
   // Field Navigation Calculations - ONLY include fields strictly assigned to THIS recipient
   const recipientFields = fields.filter((f) => f.recipient_id === recipient.id && !f.read_only);
 
+  const missingRequiredFields = recipientFields.filter(
+    (f) => f.required !== false && (!fieldValues[f.id] || fieldValues[f.id].trim() === '')
+  );
+
   const completedFieldsCount = recipientFields.filter(
     (f) => fieldValues[f.id] && fieldValues[f.id].trim() !== ''
   ).length;
@@ -207,6 +212,7 @@ export default function SignerPortalPage() {
 
   const handleOpenSignatureModal = (fieldId: string) => {
     setActiveSigFieldId(fieldId);
+    setActiveFocusedFieldId(fieldId);
     // If we already have a saved signature in the session, automatically apply it
     if (savedSignatureData) {
       handleFieldValueChange(fieldId, savedSignatureData);
@@ -222,7 +228,38 @@ export default function SignerPortalPage() {
     }
   };
 
+  const jumpToField = (targetField: DocumentField) => {
+    setActiveFocusedFieldId(targetField.id);
+    const targetPage = Number(targetField.page) || 1;
+    if (targetPage !== activePage) {
+      setActivePage(targetPage);
+    }
+    const idx = recipientFields.findIndex((f) => f.id === targetField.id);
+    if (idx !== -1) {
+      setCurrentFieldIndex(idx);
+    }
+    // Scroll field into view with pinpoint focus
+    setTimeout(() => {
+      const el = typeof window !== 'undefined' ? window.document.getElementById(`signer-field-${targetField.id}`) : null;
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      }
+      if (targetField.type === 'signature' || targetField.type === 'initials') {
+        if (!fieldValues[targetField.id]) {
+          handleOpenSignatureModal(targetField.id);
+        }
+      }
+    }, 150);
+  };
+
   const handleFinishSigning = async () => {
+    // If any required field is not filled, guide and pinpoint the missing field
+    if (missingRequiredFields.length > 0) {
+      const firstMissing = missingRequiredFields[0];
+      jumpToField(firstMissing);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       if (token && token !== 'sample_token') {
@@ -285,20 +322,28 @@ export default function SignerPortalPage() {
   };
 
   const handleNextField = () => {
-    if (currentFieldIndex < recipientFields.length - 1) {
-      const nextIndex = currentFieldIndex + 1;
-      setCurrentFieldIndex(nextIndex);
-      const targetPage = Number(recipientFields[nextIndex]?.page) || 1;
-      setActivePage(targetPage);
+    if (recipientFields.length === 0) return;
+    const nextIndex = currentFieldIndex < recipientFields.length - 1 ? currentFieldIndex + 1 : 0;
+    setCurrentFieldIndex(nextIndex);
+    const targetField = recipientFields[nextIndex];
+    if (targetField) {
+      jumpToField(targetField);
     }
   };
 
   const handlePrevField = () => {
-    if (currentFieldIndex > 0) {
-      const prevIndex = currentFieldIndex - 1;
-      setCurrentFieldIndex(prevIndex);
-      const targetPage = Number(recipientFields[prevIndex]?.page) || 1;
-      setActivePage(targetPage);
+    if (recipientFields.length === 0) return;
+    const prevIndex = currentFieldIndex > 0 ? currentFieldIndex - 1 : recipientFields.length - 1;
+    setCurrentFieldIndex(prevIndex);
+    const targetField = recipientFields[prevIndex];
+    if (targetField) {
+      jumpToField(targetField);
+    }
+  };
+
+  const handleJumpToNextMissing = () => {
+    if (missingRequiredFields.length > 0) {
+      jumpToField(missingRequiredFields[0]);
     }
   };
 
@@ -517,8 +562,8 @@ export default function SignerPortalPage() {
           fields={fields}
           recipients={allRecipients.length > 0 ? allRecipients : [recipient]}
           currentRecipient={recipient}
-          selectedFieldId={null}
-          onSelectField={() => {}}
+          selectedFieldId={activeFocusedFieldId}
+          onSelectField={(f) => setActiveFocusedFieldId(f?.id || null)}
           onUpdateFieldPosition={() => {}}
           onDeleteField={() => {}}
           onConfigureField={() => {}}
@@ -577,8 +622,11 @@ export default function SignerPortalPage() {
         currentFieldIndex={currentFieldIndex}
         totalFieldsCount={recipientFields.length}
         completedFieldsCount={completedFieldsCount}
+        missingFieldsCount={missingRequiredFields.length}
+        nextMissingFieldLabel={missingRequiredFields[0]?.label || missingRequiredFields[0]?.type || null}
         onNextField={handleNextField}
         onPrevField={handlePrevField}
+        onJumpToMissingField={handleJumpToNextMissing}
         onFinishSigning={handleFinishSigning}
         isSubmitting={isSubmitting}
         role={recipient.role}

@@ -247,12 +247,12 @@ function NewDocumentContent() {
                         : -1;
                       if (oldIndex >= 0 && newRecipients[oldIndex]) {
                         targetRecipId = newRecipients[oldIndex].id;
-                      } else if (f.type === 'signature' || f.type === 'initials') {
-                        targetRecipId = newRecipients[0]?.id || 'recip-1';
+                      } else {
+                        targetRecipId = null;
                       }
                     }
-                  } else if (f.type === 'signature' || f.type === 'initials') {
-                    targetRecipId = newRecipients[0]?.id || 'recip-1';
+                  } else {
+                    targetRecipId = null;
                   }
 
                   return {
@@ -617,9 +617,6 @@ function NewDocumentContent() {
           if (f.recipient_id) {
             const idx = recipients.findIndex((r) => r.id === f.recipient_id);
             rIndex = idx >= 0 ? idx : null;
-          }
-          if (rIndex === null && (f.type === 'signature' || f.type === 'initials')) {
-            rIndex = 0; // Default signature to 1st signer if unassigned
           }
           return {
             type: f.type,
