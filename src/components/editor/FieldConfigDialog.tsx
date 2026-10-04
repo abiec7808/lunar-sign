@@ -24,7 +24,7 @@ import {
   ArrowDown,
   Sparkles,
   AlignLeft,
-  X,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface FieldConfigDialogProps {
@@ -62,14 +62,14 @@ export function FieldConfigDialog({
   const [widthPct, setWidthPct] = useState<number>(30);
   const [heightPct, setHeightPct] = useState<number>(3.5);
 
-  // Dropdown / Radio Options
+  // Dropdown / Radio Options state
   const [options, setOptions] = useState<string[]>([]);
   const [newOptionInput, setNewOptionInput] = useState('');
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [bulkOptionsText, setBulkOptionsText] = useState('');
 
   useEffect(() => {
-    if (field) {
+    if (field && isOpen) {
       setLabel(field.label || '');
       setPlaceholder(field.placeholder || '');
       setRecipientId(field.recipient_id || null);
@@ -80,13 +80,24 @@ export function FieldConfigDialog({
       setHeightPct(Number(field.height_pct) || (field.type === 'dropdown' ? 3.5 : 3.5));
       setFontSize((field.validation_rule as any)?.fontSize ? String((field.validation_rule as any).fontSize) : 'auto');
 
-      // Initialize dropdown options
+      // Initialize dropdown options from field
       if (field.type === 'dropdown' || field.type === 'radio') {
-        const initialOpts = Array.isArray(field.options) && field.options.length > 0
-          ? field.options
-          : ['Option 1', 'Option 2', 'Option 3'];
-        setOptions(initialOpts);
-        setBulkOptionsText(initialOpts.join('\n'));
+        let loadedOpts: string[] = [];
+        if (Array.isArray(field.options) && field.options.length > 0) {
+          loadedOpts = field.options;
+        } else if (typeof field.options === 'string') {
+          try {
+            const parsed = JSON.parse(field.options);
+            if (Array.isArray(parsed) && parsed.length > 0) loadedOpts = parsed;
+          } catch (e) {}
+        }
+
+        if (loadedOpts.length === 0) {
+          loadedOpts = ['Option 1', 'Option 2', 'Option 3'];
+        }
+
+        setOptions(loadedOpts);
+        setBulkOptionsText(loadedOpts.join('\n'));
       } else {
         setOptions([]);
         setBulkOptionsText('');
@@ -94,7 +105,7 @@ export function FieldConfigDialog({
       setNewOptionInput('');
       setIsBulkMode(false);
     }
-  }, [field]);
+  }, [field, isOpen]);
 
   if (!field) return null;
 
@@ -104,11 +115,9 @@ export function FieldConfigDialog({
   const handleAddOption = () => {
     const trimmed = newOptionInput.trim();
     if (!trimmed) return;
-    if (!options.includes(trimmed)) {
-      const updated = [...options, trimmed];
-      setOptions(updated);
-      setBulkOptionsText(updated.join('\n'));
-    }
+    const updated = [...options, trimmed];
+    setOptions(updated);
+    setBulkOptionsText(updated.join('\n'));
     setNewOptionInput('');
   };
 
@@ -151,9 +160,8 @@ export function FieldConfigDialog({
       .split(/\r?\n|,/)
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
-    const unique = Array.from(new Set(parsed));
-    if (unique.length > 0) {
-      setOptions(unique);
+    if (parsed.length > 0) {
+      setOptions(parsed);
     }
     setIsBulkMode(false);
   };
@@ -165,11 +173,31 @@ export function FieldConfigDialog({
   };
 
   const handleSave = () => {
+    let workingOptions = [...options];
+
+    // If bulk mode was actively being typed in, parse it
+    if (isBulkMode && bulkOptionsText.trim()) {
+      const parsed = bulkOptionsText
+        .split(/\r?\n|,/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      if (parsed.length > 0) {
+        workingOptions = parsed;
+      }
+    } else if (newOptionInput.trim()) {
+      // If user typed in the new option bar and clicked Apply Settings directly
+      workingOptions.push(newOptionInput.trim());
+    }
+
     const cleanOptions = isDropdownOrRadio
-      ? options.map((o) => o.trim()).filter((o) => o.length > 0)
+      ? workingOptions.map((o) => o.trim()).filter((o) => o.length > 0)
       : undefined;
 
-    const finalOptions = cleanOptions && cleanOptions.length > 0 ? cleanOptions : isDropdownOrRadio ? ['Option 1', 'Option 2', 'Option 3'] : undefined;
+    const finalOptions = cleanOptions && cleanOptions.length > 0 
+      ? cleanOptions 
+      : isDropdownOrRadio 
+      ? ['Option 1', 'Option 2', 'Option 3'] 
+      : undefined;
 
     onUpdateField({
       ...field,
@@ -236,11 +264,11 @@ export function FieldConfigDialog({
 
           {/* Dedicated Options Section for Dropdown and Radio fields */}
           {isDropdownOrRadio && (
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-indigo-900/40 shadow-inner space-y-3">
+            <div className="p-3.5 rounded-xl bg-slate-950 border border-indigo-900/50 shadow-inner space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-300">
                   <List className="w-4 h-4 text-cyan-400" />
-                  <span>Dropdown Options ({options.length})</span>
+                  <span>Custom Dropdown Options ({options.length})</span>
                 </div>
                 <button
                   type="button"
@@ -258,7 +286,7 @@ export function FieldConfigDialog({
               {/* Preset Shortcuts */}
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                  <Sparkles className="w-3 h-3 text-amber-400" /> Presets:
+                  <Sparkles className="w-3 h-3 text-amber-400" /> 1-Click Presets:
                 </span>
                 {PRESET_OPTIONS.map((preset) => (
                   <button
@@ -307,14 +335,14 @@ export function FieldConfigDialog({
                 </div>
               ) : (
                 /* Interactive Option List */
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {/* Add Option Input Bar */}
                   <div className="flex items-center gap-2">
                     <Input
                       value={newOptionInput}
                       onChange={(e) => setNewOptionInput(e.target.value)}
                       onKeyDown={handleKeyDownAdd}
-                      placeholder="Type an option name & press Enter..."
+                      placeholder="Type custom option name & press Enter..."
                       className="bg-slate-900 border-slate-700 text-xs h-8 flex-1"
                     />
                     <Button
@@ -329,10 +357,10 @@ export function FieldConfigDialog({
                   </div>
 
                   {/* Options List items */}
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
                     {options.length === 0 ? (
                       <div className="text-center py-4 text-xs text-slate-500 italic">
-                        No options added yet. Type an option above or pick a preset.
+                        No options added yet. Type an option above or choose a preset.
                       </div>
                     ) : (
                       options.map((opt, idx) => (
@@ -347,8 +375,8 @@ export function FieldConfigDialog({
                             type="text"
                             value={opt}
                             onChange={(e) => handleUpdateOption(idx, e.target.value)}
-                            className="bg-transparent border-none text-xs text-slate-100 flex-1 px-1 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded"
-                            placeholder="Option text..."
+                            className="bg-slate-950 border border-slate-800 text-xs text-slate-100 flex-1 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded font-medium"
+                            placeholder="Option name..."
                           />
                           <div className="flex items-center gap-0.5 shrink-0">
                             <button
@@ -474,11 +502,6 @@ export function FieldConfigDialog({
                 className="mt-1 bg-slate-950 border-slate-700 text-xs h-9"
               />
             </div>
-          </div>
-
-          <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-400 font-sans">
-            <span className="text-indigo-300 font-semibold block">Standardization & Security:</span>
-            All fields use verified legal fonts for evidential legibility and POPIA / ECTA compliance.
           </div>
 
           {/* Required Switch */}

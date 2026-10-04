@@ -118,6 +118,22 @@ export function FieldRenderer({
       ? `Signer ${(recipient.order_index ?? 0) + 1}`
       : 'Sender';
 
+    let optionsSummary = '';
+    if (field.type === 'dropdown' || field.type === 'radio') {
+      let opts: string[] = [];
+      if (Array.isArray(field.options) && field.options.length > 0) {
+        opts = field.options;
+      } else if (typeof field.options === 'string') {
+        try {
+          const parsed = JSON.parse(field.options);
+          if (Array.isArray(parsed)) opts = parsed;
+        } catch (e) {}
+      }
+      if (opts.length > 0) {
+        optionsSummary = opts.join(', ');
+      }
+    }
+
     return (
       <div
         onClick={() => onSelectField?.(field)}
@@ -131,10 +147,16 @@ export function FieldRenderer({
           color: '#000000',
           ...arialFontStyle,
         }}
+        title={optionsSummary ? `${field.label || 'Dropdown'} options: ${optionsSummary}` : undefined}
       >
         <span className="flex items-center gap-1 font-bold truncate text-slate-950 min-w-0" style={{ fontSize: effectiveFontSize }}>
           <span style={{ color: recipientTheme.primary }}>{renderIcon()}</span>
           <span className="truncate text-slate-900">{field.label || field.type.toUpperCase()}</span>
+          {optionsSummary && (
+            <span className="text-[9px] text-slate-600 font-normal truncate max-w-[120px] hidden sm:inline">
+              ({optionsSummary})
+            </span>
+          )}
           {field.required && <span className="text-red-600 font-bold ml-0.5">*</span>}
         </span>
         <span

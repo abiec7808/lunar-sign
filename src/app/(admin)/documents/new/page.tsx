@@ -1285,16 +1285,39 @@ function NewDocumentContent() {
                             <Label className="text-slate-300 text-xs font-semibold">{field.label || field.type.toUpperCase()}</Label>
                             <span className="text-[10px] text-slate-500 font-mono">Page {field.page}</span>
                           </div>
-                          <Input
-                            value={field.value || ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setFields(fields.map((f) => (f.id === field.id ? { ...f, value: val } : f)));
-                            }}
-                            placeholder="Enter prefilled value..."
-                            style={{ fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif', color: '#000000', backgroundColor: '#ffffff' }}
-                            className="bg-white text-black font-semibold border-slate-300 text-xs shadow-sm placeholder:text-slate-400"
-                          />
+                          {field.type === 'dropdown' ? (
+                            <select
+                              value={field.value || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setFields(fields.map((f) => (f.id === field.id ? { ...f, value: val } : f)));
+                              }}
+                              style={{ fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif', color: '#000000', backgroundColor: '#ffffff' }}
+                              className="w-full h-9 px-2 bg-white text-black font-semibold border border-slate-300 rounded-lg text-xs shadow-sm cursor-pointer"
+                            >
+                              <option value="">{field.placeholder || 'Select an option...'}</option>
+                              {((Array.isArray(field.options) && field.options.length > 0 
+                                ? field.options 
+                                : typeof field.options === 'string' 
+                                ? (() => { try { return JSON.parse(field.options); } catch (e) { return ['Option 1', 'Option 2', 'Option 3']; } })() 
+                                : ['Option 1', 'Option 2', 'Option 3']) as string[]).map((opt, i) => (
+                                <option key={i} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <Input
+                              value={field.value || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setFields(fields.map((f) => (f.id === field.id ? { ...f, value: val } : f)));
+                              }}
+                              placeholder="Enter prefilled value..."
+                              style={{ fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif', color: '#000000', backgroundColor: '#ffffff' }}
+                              className="bg-white text-black font-semibold border-slate-300 text-xs shadow-sm placeholder:text-slate-400"
+                            />
+                          )}
                         </div>
                       ))}
                   </div>
