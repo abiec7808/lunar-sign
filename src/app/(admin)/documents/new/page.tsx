@@ -419,6 +419,8 @@ function NewDocumentContent() {
   const handleAddFieldFromPalette = (type: FieldType) => {
     let defaultWidth = 24;
     let defaultHeight = 3.0;
+    let defaultOptions: string[] | undefined = undefined;
+
     if (type === 'signature' || type === 'initials') {
       defaultWidth = 24;
       defaultHeight = 5.5;
@@ -428,6 +430,10 @@ function NewDocumentContent() {
     } else if (type === 'date_signed' || type === 'date_picker') {
       defaultWidth = 20;
       defaultHeight = 3.0;
+    } else if (type === 'dropdown' || type === 'radio') {
+      defaultWidth = 28;
+      defaultHeight = 3.5;
+      defaultOptions = ['Option 1', 'Option 2', 'Option 3'];
     }
 
     const newField: DocumentField = {
@@ -442,6 +448,7 @@ function NewDocumentContent() {
       height_pct: defaultHeight,
       required: true,
       label: type.toUpperCase().replace('_', ' '),
+      options: defaultOptions,
       read_only: false,
       created_at: new Date().toISOString(),
     };
@@ -625,6 +632,8 @@ function NewDocumentContent() {
             label: f.label || f.type,
             placeholder: f.placeholder || '',
             value: f.value || f.default_value || undefined,
+            options: f.options || undefined,
+            validation_rule: f.validation_rule || undefined,
             recipientIndex: rIndex,
           };
         }),

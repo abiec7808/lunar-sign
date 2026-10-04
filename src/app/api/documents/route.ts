@@ -37,6 +37,8 @@ const CreateDocumentSchema = z.object({
       label: z.string().optional(),
       placeholder: z.string().optional(),
       value: z.string().optional(),
+      options: z.array(z.string()).optional().nullable(),
+      validation_rule: z.record(z.string(), z.unknown()).optional().nullable(),
       recipientIndex: z.number().nullable(), // null = sender field
     })
   ),
@@ -274,8 +276,8 @@ export async function POST(req: NextRequest) {
       await dbQuery(
         `INSERT INTO fields (
           document_id, recipient_id, type, page, x_pct, y_pct, width_pct, height_pct,
-          required, label, placeholder, value
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          required, label, placeholder, value, options, validation_rule
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
         [
           doc.id,
           mappedRecipId,
@@ -289,6 +291,8 @@ export async function POST(req: NextRequest) {
           f.label || f.type,
           f.placeholder || null,
           f.value || null,
+          f.options ? JSON.stringify(f.options) : null,
+          f.validation_rule ? JSON.stringify(f.validation_rule) : null,
         ]
       );
     }

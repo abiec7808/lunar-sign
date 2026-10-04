@@ -336,23 +336,33 @@ export function FieldRenderer({
         </div>
       );
 
-    case 'dropdown':
-      const options = (field.options as string[]) || ['Option 1', 'Option 2', 'Option 3'];
+    case 'dropdown': {
+      let parsedOptions: string[] = ['Option 1', 'Option 2', 'Option 3'];
+      if (Array.isArray(field.options) && field.options.length > 0) {
+        parsedOptions = field.options;
+      } else if (typeof field.options === 'string') {
+        try {
+          const parsed = JSON.parse(field.options);
+          if (Array.isArray(parsed) && parsed.length > 0) parsedOptions = parsed;
+        } catch (e) {}
+      }
+
       return (
         <select
           value={value}
           onChange={(e) => onChange?.(e.target.value)}
           style={{ ...arialFontStyle, fontSize: effectiveFontSize, color: '#000000', backgroundColor: '#ffffff' }}
-          className="w-full h-full px-1 py-0 rounded border border-slate-400 bg-white text-black font-semibold focus:ring-1 focus:ring-indigo-600 outline-none leading-none shadow-sm"
+          className="w-full h-full px-1 py-0 rounded border border-slate-400 bg-white text-black font-semibold focus:ring-1 focus:ring-indigo-600 outline-none leading-none shadow-sm cursor-pointer"
         >
-          <option value="">Select...</option>
-          {options.map((opt, i) => (
+          <option value="">{field.placeholder || 'Select an option...'}</option>
+          {parsedOptions.map((opt, i) => (
             <option key={i} value={opt}>
               {opt}
             </option>
           ))}
         </select>
       );
+    }
 
     default:
       if (field.read_only) {
