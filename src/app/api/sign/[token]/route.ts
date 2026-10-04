@@ -361,10 +361,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         completedAt: nowIso,
       }).catch(console.error);
     } else {
-      // Trigger the automated background sequential engine for this document
-      import('@/lib/email/sequential-trigger')
-        .then((m) => m.checkAndTriggerSequentialSigners(recipient.doc_id))
-        .catch((err) => console.warn('[Sequential Trigger error]:', err));
+      // Trigger the automated sequential engine for this document immediately so the next signer is notified
+      try {
+        const { checkAndTriggerSequentialSigners } = await import('@/lib/email/sequential-trigger');
+        await checkAndTriggerSequentialSigners(recipient.doc_id);
+      } catch (seqErr) {
+        console.warn('[Sequential Trigger error]:', seqErr);
+      }
     }
 
     return NextResponse.json({

@@ -239,27 +239,45 @@ export async function POST(req: NextRequest) {
         console.warn('Auto-save contact warning:', cErr);
       }
 
-      // Send Email Invitation to all recipients immediately
-      const { getAppUrl } = await import('@/lib/url');
-      const appUrl = getAppUrl(req, orgCustomDomain);
-      const signingUrl = `${appUrl}/s/${recipId}`;
+      // Determine whether to send email invitation immediately (respects sequential signing order)
+      const isSequential = validated.signingOrderEnforced === true;
+      const isFirstSigner = (r.orderIndex ?? i) === 0 || i === 0;
+      const shouldSendImmediately = !isSequential || isFirstSigner;
 
-      try {
-        await emailService.sendSignatureRequest({
-          to: r.email,
-          recipientName: r.name,
-          senderName,
-          documentTitle: validated.title,
-          message: validated.message,
-          signingUrl,
-          expiresAtFormatted: formatSaDate(tokenExpiresAt),
-          documentId: doc.id,
-          recipientId: recipId,
-          force: true,
-        });
-        console.log(`[POST /api/documents] Dispatched signature request to ${r.email}`);
-      } catch (err) {
-        console.error(`Error sending email to ${r.email}:`, err);
+      if (shouldSendImmediately) {
+        const { getAppUrl } = await import('@/lib/url');
+        const appUrl = getAppUrl(req, orgCustomDomain);
+        const signingUrl = `${appUrl}/s/${recipId}`;
+
+        try {
+          await emailService.sendSignatureRequest({
+            to: r.email,
+            recipientName: r.name,
+            senderName,
+            documentTitle: validated.title,
+            message: validated.message,
+            signingUrl,
+            expiresAtFormatted: formatSaDate(tokenExpiresAt),
+            documentId: doc.id,
+            recipientId: recipId,
+            force: true,
+          });
+          console.log(`[POST /api/documents] Dispatched signature request to ${r.email} (Signer #${i + 1})`);
+
+          await dbQuery(
+            `INSERT INTO audit_events (document_id, recipient_id, actor_type, event_type, description)
+             VALUES ($1, $2, 'system', 'invitation.sent', $3)`,
+            [
+              doc.id,
+              recipId,
+              `Signature invitation dispatched to ${r.name} (${r.email}).`,
+            ]
+          );
+        } catch (err) {
+          console.error(`Error sending email to ${r.email}:`, err);
+        }
+      } else {
+        console.log(`[POST /api/documents] Sequential order active. Deferred signature email for Signer #${(r.orderIndex ?? i) + 1}: ${r.name} (${r.email}) until previous signer signs.`);
       }
     }
 

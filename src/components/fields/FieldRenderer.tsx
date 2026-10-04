@@ -143,8 +143,14 @@ export function FieldRenderer({
       >
         <span className="flex items-center gap-1 font-bold truncate text-slate-950 min-w-0" style={{ fontSize: effectiveFontSize }}>
           <span style={{ color: recipientTheme.primary }}>{renderIcon()}</span>
-          <span className="truncate text-slate-900">{field.label || field.type.toUpperCase()}</span>
-          {optionsSummary && (
+          <span className="truncate text-slate-900">{field.label || (field.type === 'dropdown' ? 'DROPDOWN' : field.type.toUpperCase())}</span>
+          {field.type === 'dropdown' && (
+            <span className="text-[10px] text-slate-800 font-semibold truncate max-w-[260px] ml-1 px-1.5 py-0.5 bg-white/90 rounded border border-slate-300 shadow-xs flex items-center gap-1">
+              <span className="text-indigo-600 font-black">▼</span>
+              <span className="truncate">{optionsSummary || 'Options: Option 1, Option 2, Option 3'}</span>
+            </span>
+          )}
+          {field.type !== 'dropdown' && optionsSummary && (
             <span className="text-[10px] text-slate-800 font-semibold truncate max-w-[220px] ml-1 px-1.5 py-0.2 bg-white/80 rounded border border-slate-300 shadow-xs">
               ▼ {optionsSummary}
             </span>

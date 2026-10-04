@@ -480,6 +480,9 @@ function NewDocumentContent() {
     };
     setFields([...fields, newField]);
     setSelectedField(newField);
+    if (type === 'dropdown' || type === 'radio') {
+      setIsConfigDialogOpen(true);
+    }
   };
 
   const handleUpdateFieldPosition = (fieldId: string, x_pct: number, y_pct: number) => {

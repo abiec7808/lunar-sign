@@ -185,6 +185,12 @@ export function InteractivePdfCanvas({
             key={field.id}
             id={`signer-field-${field.id}`}
             onMouseDown={(e) => handleMouseDownMove(e, field)}
+            onDoubleClick={(e) => {
+              if (!isSignerMode) {
+                e.stopPropagation();
+                onConfigureField(field);
+              }
+            }}
             style={{
               position: 'absolute',
               left: `${field.x_pct}%`,

@@ -260,17 +260,33 @@ export function FieldConfigDialog({
                   <List className="w-4 h-4 text-cyan-400" />
                   <span>Custom Dropdown Options ({options.length})</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBulkOptionsText(options.join('\n'));
-                    setIsBulkMode(!isBulkMode);
-                  }}
-                  className="text-[11px] text-cyan-400 hover:text-cyan-300 underline font-medium flex items-center gap-1 transition-colors"
-                >
-                  <AlignLeft className="w-3 h-3" />
-                  {isBulkMode ? 'Simple List View' : 'Bulk Paste / Edit'}
-                </button>
+                <div className="flex items-center gap-2">
+                  {options.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOptions([]);
+                        setBulkOptionsText('');
+                        setValue('');
+                      }}
+                      className="text-[11px] text-red-400 hover:text-red-300 font-medium transition-colors"
+                      title="Clear all options to start fresh"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkOptionsText(options.join('\n'));
+                      setIsBulkMode(!isBulkMode);
+                    }}
+                    className="text-[11px] text-cyan-400 hover:text-cyan-300 underline font-medium flex items-center gap-1 transition-colors"
+                  >
+                    <AlignLeft className="w-3 h-3" />
+                    {isBulkMode ? 'Simple List View' : 'Bulk Paste / Edit'}
+                  </button>
+                </div>
               </div>
 
               {/* Preset Shortcuts */}
