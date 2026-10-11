@@ -77,13 +77,20 @@ export default function LunarCalcPage() {
 
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<CalcProduct | null>(null);
-  const [productForm, setProductForm] = useState({
+  const [productForm, setProductForm] = useState<{
+    name: string;
+    code: string;
+    description: string;
+    cost_price: string | number;
+    selling_price: string | number;
+    billing_cycle: 'monthly' | 'annually' | 'once_off';
+  }>({
     name: '',
     code: '',
     description: '',
-    cost_price: 0,
-    selling_price: 0,
-    billing_cycle: 'monthly' as 'monthly' | 'annually' | 'once_off',
+    cost_price: '0',
+    selling_price: '',
+    billing_cycle: 'monthly',
   });
 
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
@@ -278,8 +285,8 @@ export default function LunarCalcPage() {
         name: product.name,
         code: product.code || '',
         description: product.description || '',
-        cost_price: product.cost_price,
-        selling_price: product.selling_price,
+        cost_price: product.cost_price.toString(),
+        selling_price: product.selling_price.toString(),
         billing_cycle: product.billing_cycle,
       });
     } else {
@@ -288,8 +295,8 @@ export default function LunarCalcPage() {
         name: '',
         code: '',
         description: '',
-        cost_price: 0,
-        selling_price: 0,
+        cost_price: '0',
+        selling_price: '',
         billing_cycle: 'monthly',
       });
     }
@@ -306,13 +313,22 @@ export default function LunarCalcPage() {
         : `/api/calc/products${orgParam}`;
       const method = editingProduct ? 'PUT' : 'POST';
 
+      const parsedCost =
+        productForm.cost_price === '' || productForm.cost_price === null
+          ? 0
+          : Number(productForm.cost_price);
+      const parsedSelling =
+        productForm.selling_price === '' || productForm.selling_price === null
+          ? 0
+          : Number(productForm.selling_price);
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...productForm,
-          cost_price: Number(productForm.cost_price),
-          selling_price: Number(productForm.selling_price),
+          cost_price: isNaN(parsedCost) ? 0 : Math.max(0, parsedCost),
+          selling_price: isNaN(parsedSelling) ? 0 : Math.max(0, parsedSelling),
         }),
       });
 
@@ -1365,19 +1381,22 @@ export default function LunarCalcPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-amber-400 font-semibold block mb-1">
-                  Cost Price from EasyAs (R) *
+                  Cost Price from EasyAs (R)
                 </label>
                 <Input
                   type="number"
                   step="0.01"
-                  required
-                  placeholder="250.00"
-                  value={productForm.cost_price || ''}
+                  min="0"
+                  placeholder="0.00"
+                  value={productForm.cost_price ?? ''}
                   onChange={(e) =>
-                    setProductForm({ ...productForm, cost_price: parseFloat(e.target.value) || 0 })
+                    setProductForm({ ...productForm, cost_price: e.target.value })
                   }
                   className="bg-slate-950 border-slate-800 text-xs text-white font-mono"
                 />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Enter 0 for zero-cost services, setup or internal labor.
+                </span>
               </div>
 
               <div>
@@ -1387,13 +1406,14 @@ export default function LunarCalcPage() {
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
                   required
                   placeholder="550.00"
-                  value={productForm.selling_price || ''}
+                  value={productForm.selling_price ?? ''}
                   onChange={(e) =>
                     setProductForm({
                       ...productForm,
-                      selling_price: parseFloat(e.target.value) || 0,
+                      selling_price: e.target.value,
                     })
                   }
                   className="bg-slate-950 border-slate-800 text-xs text-white font-mono"
@@ -1406,7 +1426,11 @@ export default function LunarCalcPage() {
               <span className="text-emerald-400 font-semibold">Unit Profit Difference:</span>
               <span className="font-mono font-bold text-emerald-300">
                 {formatZarCurrency(
-                  Math.max(0, (productForm.selling_price || 0) - (productForm.cost_price || 0))
+                  Math.max(
+                    0,
+                    (Number(productForm.selling_price) || 0) -
+                      (Number(productForm.cost_price) || 0)
+                  )
                 )}
               </span>
             </div>
