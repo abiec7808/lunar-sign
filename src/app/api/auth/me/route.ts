@@ -11,7 +11,7 @@ export async function GET() {
 
     // Refresh org details from database
     const orgRes = await dbQuery(
-      `SELECT o.*, p.full_name, p.role, p.email
+      `SELECT o.*, p.full_name, p.role, p.email, p.is_super_admin
        FROM profiles p
        JOIN organisations o ON p.org_id = o.id
        WHERE p.id = $1
@@ -24,6 +24,9 @@ export async function GET() {
     }
 
     const data = orgRes.rows[0];
+    const isSuperAdmin = Boolean(data.is_super_admin || data.email === 'admin@lunarposgeorge.co.za');
+    const lunarCalcEnabled = Boolean(data.lunar_calc_enabled || isSuperAdmin);
+
     return NextResponse.json({
       user: {
         userId: session.userId,
@@ -31,6 +34,8 @@ export async function GET() {
         email: data.email,
         fullName: data.full_name,
         role: data.role,
+        isSuperAdmin,
+        lunarCalcEnabled,
         orgName: data.name,
         orgSlug: data.slug,
         vatNumber: data.vat_number,

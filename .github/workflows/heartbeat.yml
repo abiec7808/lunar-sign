@@ -1,0 +1,82 @@
+name: Keep-Alive Heartbeat
+
+on:
+  schedule:
+    # Runs every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)
+    # Prevents Supabase 7-day inactivity pausing & keeps Netlify warm
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      ping_only:
+        description: 'Perform ping only (skip reminder emails & sequential progression)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: keep-alive-heartbeat
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    name: Ping Lunar Sign & Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Send Heartbeat Request
+        run: |
+          # 1. Determine Target Application URL
+          APP_URL="${{ secrets.APP_URL }}"
+          if [ -z "$APP_URL" ]; then
+            APP_URL="https://lunar-sign.netlify.app"
+          fi
+          
+          # Strip trailing slash
+          APP_URL="${APP_URL%/}"
+          
+          # Build target endpoint
+          QUERY_PARAMS=""
+          if [ "${{ github.event.inputs.ping_only }}" = "true" ]; then
+            QUERY_PARAMS="?ping_only=true"
+          fi
+          
+          TARGET_URL="${APP_URL}/api/heartbeat${QUERY_PARAMS}"
+          echo "📡 Connecting to Heartbeat endpoint: ${TARGET_URL}"
+          
+          # 2. Build Authentication Headers
+          AUTH_HEADER=""
+          if [ -n "${{ secrets.HEARTBEAT_SECRET }}" ]; then
+            AUTH_HEADER="-H \"Authorization: Bearer ${{ secrets.HEARTBEAT_SECRET }}\""
+          elif [ -n "${{ secrets.CRON_SECRET }}" ]; then
+            AUTH_HEADER="-H \"Authorization: Bearer ${{ secrets.CRON_SECRET }}\""
+          fi
+          
+          # 3. Execute HTTP Call
+          START_TIME=$(date +%s%3N)
+          
+          if [ -n "$AUTH_HEADER" ]; then
+            HTTP_RESPONSE=$(eval curl -s -S -w "\nHTTP_STATUS:%{http_code}" -X GET -H '"User-Agent: LunarSign-GitHub-KeepAlive/1.0"' $AUTH_HEADER "\"${TARGET_URL}\"")
+          else
+            HTTP_RESPONSE=$(curl -s -S -w "\nHTTP_STATUS:%{http_code}" -X GET -H "User-Agent: LunarSign-GitHub-KeepAlive/1.0" "${TARGET_URL}")
+          fi
+          
+          END_TIME=$(date +%s%3N)
+          ELAPSED=$((END_TIME - START_TIME))
+          
+          HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed -e '$d')
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n 1 | cut -d':' -f2)
+          
+          echo "⏱️ Request completed in ${ELAPSED}ms"
+          echo "📊 HTTP Status: ${HTTP_STATUS}"
+          echo "📄 Response Payload:"
+          echo "$HTTP_BODY"
+          
+          # 4. Validate Success
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "✅ Heartbeat successful! Supabase DB and Netlify instance are active and warm."
+            exit 0
+          else
+            echo "❌ Heartbeat failed with HTTP status ${HTTP_STATUS}"
+            exit 1
+          fi

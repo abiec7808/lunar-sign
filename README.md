@@ -90,6 +90,15 @@ npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+### 6. Keep-Alive Heartbeat & Inactivity Prevention
+To prevent Supabase from pausing after 7 days of inactivity and prevent serverless cold starts:
+- **API Endpoint**: `GET /api/heartbeat` (or `GET /api/health`)
+- **Automated Cron**: A GitHub Actions workflow (`.github/workflows/heartbeat.yml`) runs automatically every 6 hours (`0 */6 * * *`) and on manual dispatch.
+- **Local / CLI Test**:
+  ```bash
+  npm run heartbeat
+  ```
+
 ---
 
 ## 🔒 South African ECTA 25 of 2002 Legal Framework

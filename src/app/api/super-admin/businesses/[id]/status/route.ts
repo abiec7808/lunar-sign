@@ -4,9 +4,10 @@ import { dbQuery } from '@/lib/db';
 import { getAuthenticatedUserWithOrg } from '@/lib/auth/session';
 
 const UpdateBusinessStatusSchema = z.object({
-  status: z.enum(['approved', 'pending_approval', 'suspended']),
+  status: z.enum(['approved', 'pending_approval', 'suspended']).optional(),
   maxUsers: z.number().optional(),
   maxDocuments: z.number().optional(),
+  lunarCalcEnabled: z.boolean().optional(),
 });
 
 export async function POST(
@@ -23,14 +24,19 @@ export async function POST(
     const body = await req.json();
     const validated = UpdateBusinessStatusSchema.parse(body);
 
-    const updates: string[] = ['status = $1', 'updated_at = NOW()'];
-    const values: any[] = [validated.status, id];
-    let paramIdx = 3;
+    const updates: string[] = ['updated_at = NOW()'];
+    const values: any[] = [id];
+    let paramIdx = 2;
 
-    if (validated.status === 'approved') {
-      updates.push(`approved_at = NOW()`);
-      updates.push(`approved_by = $${paramIdx++}`);
-      values.push(auth.userId);
+    if (validated.status) {
+      updates.push(`status = $${paramIdx++}`);
+      values.push(validated.status);
+
+      if (validated.status === 'approved') {
+        updates.push(`approved_at = NOW()`);
+        updates.push(`approved_by = $${paramIdx++}`);
+        values.push(auth.userId);
+      }
     }
 
     if (validated.maxUsers !== undefined) {
@@ -43,10 +49,15 @@ export async function POST(
       values.push(validated.maxDocuments);
     }
 
+    if (validated.lunarCalcEnabled !== undefined) {
+      updates.push(`lunar_calc_enabled = $${paramIdx++}`);
+      values.push(validated.lunarCalcEnabled);
+    }
+
     const query = `
       UPDATE organisations
       SET ${updates.join(', ')}
-      WHERE id::text = $2
+      WHERE id::text = $1
       RETURNING *
     `;
 

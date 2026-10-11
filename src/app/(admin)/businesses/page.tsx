@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Mail,
   Phone,
+  Calculator,
 } from 'lucide-react';
 import { formatSaDate } from '@/lib/dates';
 
@@ -38,6 +39,7 @@ interface Business {
   company_reg_number?: string;
   phone?: string;
   created_at: string;
+  lunar_calc_enabled?: boolean;
 }
 
 export default function SuperAdminBusinessesPage() {
@@ -84,6 +86,24 @@ export default function SuperAdminBusinessesPage() {
       }
     } catch (err) {
       console.error('Failed to update business status:', err);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleToggleLunarCalc = async (id: string, current: boolean) => {
+    setActionLoadingId(id);
+    try {
+      const res = await fetch(`/api/super-admin/businesses/${id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lunarCalcEnabled: !current }),
+      });
+      if (res.ok) {
+        await fetchBusinesses();
+      }
+    } catch (err) {
+      console.error('Failed to toggle Lunar Calc for business:', err);
     } finally {
       setActionLoadingId(null);
     }
@@ -202,6 +222,7 @@ export default function SuperAdminBusinessesPage() {
                     <th className="py-3 px-4">Business & Legal Name</th>
                     <th className="py-3 px-4">Admin Contact</th>
                     <th className="py-3 px-4">Usage Limits</th>
+                    <th className="py-3 px-4">Lunar Calc</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Registered</th>
                     <th className="py-3 px-4 text-right">Approval Actions</th>
@@ -210,7 +231,7 @@ export default function SuperAdminBusinessesPage() {
                 <tbody className="divide-y divide-slate-800/60">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-xs text-slate-500">
+                      <td colSpan={7} className="py-8 text-center text-xs text-slate-500">
                         {isLoading ? 'Loading businesses from database...' : 'No businesses match the criteria.'}
                       </td>
                     </tr>
@@ -259,6 +280,22 @@ export default function SuperAdminBusinessesPage() {
                               </span>
                             </div>
                           </div>
+                        </td>
+
+                        <td className="py-4 px-4">
+                          <button
+                            disabled={actionLoadingId === b.id}
+                            onClick={() => handleToggleLunarCalc(b.id, Boolean(b.lunar_calc_enabled))}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                              b.lunar_calc_enabled
+                                ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
+                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                            }`}
+                            title={b.lunar_calc_enabled ? 'Click to disable Lunar Calc' : 'Click to enable Lunar Calc'}
+                          >
+                            <Calculator className="w-3.5 h-3.5" />
+                            <span>{b.lunar_calc_enabled ? 'Enabled' : 'Disabled'}</span>
+                          </button>
                         </td>
 
                         <td className="py-4 px-4">

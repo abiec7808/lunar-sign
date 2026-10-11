@@ -15,6 +15,7 @@ import {
   Building,
   Menu,
   X,
+  Calculator,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ export function AdminSidebar() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [primaryColor, setPrimaryColor] = useState<string | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
+  const [lunarCalcEnabled, setLunarCalcEnabled] = useState<boolean>(false);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -48,6 +50,9 @@ export function AdminSidebar() {
           if (data.user.primaryColor) setPrimaryColor(data.user.primaryColor);
           if (data.user.email === 'admin@lunarposgeorge.co.za' || data.user.isSuperAdmin) {
             setIsSuperAdmin(true);
+            setLunarCalcEnabled(true);
+          } else if (data.user.lunarCalcEnabled) {
+            setLunarCalcEnabled(true);
           }
         }
       } catch (err) {
@@ -62,12 +67,23 @@ export function AdminSidebar() {
     setIsMobileOpen(false);
   }, [pathname]);
 
-  const navItems = isSuperAdmin
-    ? [
-        ...NAV_ITEMS,
-        { href: '/businesses', label: 'Businesses (Super Admin)', icon: Building },
-      ]
-    : NAV_ITEMS;
+  const items = [...NAV_ITEMS];
+  if (isSuperAdmin || lunarCalcEnabled) {
+    items.push({
+      href: '/lunar-calc',
+      label: isSuperAdmin ? 'Lunar Calc (Admin)' : 'Lunar Calc',
+      icon: Calculator,
+    });
+  }
+  if (isSuperAdmin) {
+    items.push({
+      href: '/businesses',
+      label: 'Businesses (Super Admin)',
+      icon: Building,
+    });
+  }
+
+  const navItems = items;
 
   const SidebarContent = () => (
     <div className="flex flex-col justify-between h-full bg-slate-950">
