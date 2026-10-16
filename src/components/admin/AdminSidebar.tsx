@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   Calculator,
+  UserPlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/documents', label: 'Documents', icon: FileText },
   { href: '/templates', label: 'Templates', icon: Copy },
+  { href: '/client-onboarding', label: 'Client Onboarding', icon: UserPlus },
   { href: '/contacts', label: 'Address Book', icon: Users },
   { href: '/team', label: 'Team & Roles', icon: UserCheck },
   { href: '/settings', label: 'Settings & Branding', icon: Settings },
@@ -37,6 +39,7 @@ export function AdminSidebar() {
   const [primaryColor, setPrimaryColor] = useState<string | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
   const [lunarCalcEnabled, setLunarCalcEnabled] = useState<boolean>(false);
+  const [clientOnboardingEnabled, setClientOnboardingEnabled] = useState<boolean>(false);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -51,8 +54,10 @@ export function AdminSidebar() {
           if (data.user.email === 'admin@lunarposgeorge.co.za' || data.user.isSuperAdmin) {
             setIsSuperAdmin(true);
             setLunarCalcEnabled(true);
-          } else if (data.user.lunarCalcEnabled) {
-            setLunarCalcEnabled(true);
+            setClientOnboardingEnabled(true);
+          } else {
+            if (data.user.lunarCalcEnabled) setLunarCalcEnabled(true);
+            if (data.user.clientOnboardingEnabled) setClientOnboardingEnabled(true);
           }
         }
       } catch (err) {

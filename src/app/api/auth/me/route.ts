@@ -26,6 +26,8 @@ export async function GET() {
     const data = orgRes.rows[0];
     const isSuperAdmin = Boolean(data.is_super_admin || data.email === 'admin@lunarposgeorge.co.za');
     const lunarCalcEnabled = Boolean(data.lunar_calc_enabled || isSuperAdmin);
+    const clientOnboardingEnabled = Boolean(data.client_onboarding_enabled || isSuperAdmin);
+    const clientOnboardingRequested = Boolean(data.client_onboarding_requested);
 
     return NextResponse.json({
       user: {
@@ -36,6 +38,8 @@ export async function GET() {
         role: data.role,
         isSuperAdmin,
         lunarCalcEnabled,
+        clientOnboardingEnabled,
+        clientOnboardingRequested,
         orgName: data.name,
         orgSlug: data.slug,
         vatNumber: data.vat_number,

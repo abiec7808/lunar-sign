@@ -9,6 +9,9 @@ import { ReminderEmail, ReminderEmailProps } from '@/emails/ReminderEmail';
 import { DeclinedEmail, DeclinedEmailProps } from '@/emails/DeclinedEmail';
 import { VoidedEmail, VoidedEmailProps } from '@/emails/VoidedEmail';
 import { NewRegistrationAlertEmail, NewRegistrationAlertEmailProps } from '@/emails/NewRegistrationAlertEmail';
+import { ClientOnboardingRequestAlertEmail, ClientOnboardingRequestAlertEmailProps } from '@/emails/ClientOnboardingRequestAlertEmail';
+import { ClientOnboardingInviteEmail, ClientOnboardingInviteEmailProps } from '@/emails/ClientOnboardingInviteEmail';
+import { ClientOnboardingCompletedEmail, ClientOnboardingCompletedEmailProps } from '@/emails/ClientOnboardingCompletedEmail';
 
 export interface SendEmailOptions {
   to: string;
@@ -29,6 +32,9 @@ export interface IEmailService {
   sendDeclined(props: DeclinedEmailProps & { to: string; documentId: string; force?: boolean }): Promise<boolean>;
   sendVoided(props: VoidedEmailProps & { to: string; documentId: string; recipientId?: string; force?: boolean }): Promise<boolean>;
   sendNewRegistrationAlert(props: NewRegistrationAlertEmailProps & { to?: string; force?: boolean }): Promise<boolean>;
+  sendClientOnboardingRequestAlert(props: ClientOnboardingRequestAlertEmailProps & { to?: string; force?: boolean }): Promise<boolean>;
+  sendClientOnboardingInvite(props: ClientOnboardingInviteEmailProps & { to: string; force?: boolean }): Promise<boolean>;
+  sendClientOnboardingCompleted(props: ClientOnboardingCompletedEmailProps & { to: string; force?: boolean }): Promise<boolean>;
 }
 
 export class ResendEmailService implements IEmailService {
@@ -223,6 +229,43 @@ export class ResendEmailService implements IEmailService {
       subject: `🚀 New Business Registration: ${props.businessName} (Approval Needed)`,
       reactElement: React.createElement(NewRegistrationAlertEmail, props),
       templateName: 'super_admin_registration_alert',
+      force: props.force,
+    });
+    return res.success;
+  }
+
+  async sendClientOnboardingRequestAlert(props: ClientOnboardingRequestAlertEmailProps & { to?: string; force?: boolean }): Promise<boolean> {
+    const recipient = props.to || 'admin@lunarposgeorge.co.za';
+    const res = await this.sendEmail({
+      to: recipient,
+      subject: `📋 Client Onboarding Module Requested: ${props.businessName}`,
+      reactElement: React.createElement(ClientOnboardingRequestAlertEmail, props),
+      templateName: 'client_onboarding_request_alert',
+      force: props.force,
+    });
+    return res.success;
+  }
+
+  async sendClientOnboardingInvite(props: ClientOnboardingInviteEmailProps & { to: string; force?: boolean }): Promise<boolean> {
+    const res = await this.sendEmail({
+      to: props.to,
+      subject: `📋 Client Onboarding Invitation from ${props.businessName}`,
+      reactElement: React.createElement(ClientOnboardingInviteEmail, props),
+      templateName: 'client_onboarding_invite',
+      force: props.force,
+    });
+    return res.success;
+  }
+
+  async sendClientOnboardingCompleted(props: ClientOnboardingCompletedEmailProps & { to: string; force?: boolean }): Promise<boolean> {
+    const subject = props.isClientReceipt
+      ? `✓ Onboarding Confirmation: ${props.businessName}`
+      : `🎉 New Client Onboarded: ${props.companyName} (${props.clientName})`;
+    const res = await this.sendEmail({
+      to: props.to,
+      subject,
+      reactElement: React.createElement(ClientOnboardingCompletedEmail, props),
+      templateName: 'client_onboarding_completed',
       force: props.force,
     });
     return res.success;
@@ -466,6 +509,43 @@ export class DirectSmtpEmailService implements IEmailService {
       subject: `🚀 New Business Registration: ${props.businessName} (Approval Needed)`,
       reactElement: React.createElement(NewRegistrationAlertEmail, props),
       templateName: 'super_admin_registration_alert',
+      force: props.force,
+    });
+    return res.success;
+  }
+
+  async sendClientOnboardingRequestAlert(props: ClientOnboardingRequestAlertEmailProps & { to?: string; force?: boolean }): Promise<boolean> {
+    const recipient = props.to || 'admin@lunarposgeorge.co.za';
+    const res = await this.sendEmail({
+      to: recipient,
+      subject: `📋 Client Onboarding Module Requested: ${props.businessName}`,
+      reactElement: React.createElement(ClientOnboardingRequestAlertEmail, props),
+      templateName: 'client_onboarding_request_alert',
+      force: props.force,
+    });
+    return res.success;
+  }
+
+  async sendClientOnboardingInvite(props: ClientOnboardingInviteEmailProps & { to: string; force?: boolean }): Promise<boolean> {
+    const res = await this.sendEmail({
+      to: props.to,
+      subject: `📋 Client Onboarding Invitation from ${props.businessName}`,
+      reactElement: React.createElement(ClientOnboardingInviteEmail, props),
+      templateName: 'client_onboarding_invite',
+      force: props.force,
+    });
+    return res.success;
+  }
+
+  async sendClientOnboardingCompleted(props: ClientOnboardingCompletedEmailProps & { to: string; force?: boolean }): Promise<boolean> {
+    const subject = props.isClientReceipt
+      ? `✓ Onboarding Confirmation: ${props.businessName}`
+      : `🎉 New Client Onboarded: ${props.companyName} (${props.clientName})`;
+    const res = await this.sendEmail({
+      to: props.to,
+      subject,
+      reactElement: React.createElement(ClientOnboardingCompletedEmail, props),
+      templateName: 'client_onboarding_completed',
       force: props.force,
     });
     return res.success;

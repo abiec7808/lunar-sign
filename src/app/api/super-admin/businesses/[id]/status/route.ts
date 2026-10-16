@@ -8,6 +8,7 @@ const UpdateBusinessStatusSchema = z.object({
   maxUsers: z.number().optional(),
   maxDocuments: z.number().optional(),
   lunarCalcEnabled: z.boolean().optional(),
+  clientOnboardingEnabled: z.boolean().optional(),
 });
 
 export async function POST(
@@ -52,6 +53,15 @@ export async function POST(
     if (validated.lunarCalcEnabled !== undefined) {
       updates.push(`lunar_calc_enabled = $${paramIdx++}`);
       values.push(validated.lunarCalcEnabled);
+    }
+
+    if (validated.clientOnboardingEnabled !== undefined) {
+      updates.push(`client_onboarding_enabled = $${paramIdx++}`);
+      values.push(validated.clientOnboardingEnabled);
+      if (validated.clientOnboardingEnabled) {
+        // clear requested flag if enabled
+        updates.push(`client_onboarding_requested = false`);
+      }
     }
 
     const query = `

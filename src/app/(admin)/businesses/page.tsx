@@ -40,6 +40,9 @@ interface Business {
   phone?: string;
   created_at: string;
   lunar_calc_enabled?: boolean;
+  client_onboarding_enabled?: boolean;
+  client_onboarding_requested?: boolean;
+  client_onboarding_requested_at?: string;
 }
 
 export default function SuperAdminBusinessesPage() {
@@ -104,6 +107,24 @@ export default function SuperAdminBusinessesPage() {
       }
     } catch (err) {
       console.error('Failed to toggle Lunar Calc for business:', err);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleToggleClientOnboarding = async (id: string, current: boolean) => {
+    setActionLoadingId(id);
+    try {
+      const res = await fetch(`/api/super-admin/businesses/${id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientOnboardingEnabled: !current }),
+      });
+      if (res.ok) {
+        await fetchBusinesses();
+      }
+    } catch (err) {
+      console.error('Failed to toggle Client Onboarding for business:', err);
     } finally {
       setActionLoadingId(null);
     }
@@ -223,6 +244,7 @@ export default function SuperAdminBusinessesPage() {
                     <th className="py-3 px-4">Admin Contact</th>
                     <th className="py-3 px-4">Usage Limits</th>
                     <th className="py-3 px-4">Lunar Calc</th>
+                    <th className="py-3 px-4">Client Onboarding</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Registered</th>
                     <th className="py-3 px-4 text-right">Approval Actions</th>
@@ -296,6 +318,29 @@ export default function SuperAdminBusinessesPage() {
                             <Calculator className="w-3.5 h-3.5" />
                             <span>{b.lunar_calc_enabled ? 'Enabled' : 'Disabled'}</span>
                           </button>
+                        </td>
+
+                        <td className="py-4 px-4">
+                          <div className="flex flex-col gap-1 items-start">
+                            <button
+                              disabled={actionLoadingId === b.id}
+                              onClick={() => handleToggleClientOnboarding(b.id, Boolean(b.client_onboarding_enabled))}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                                b.client_onboarding_enabled
+                                  ? 'bg-cyan-950/60 border-cyan-500/50 text-cyan-300 hover:bg-cyan-900/60'
+                                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                              }`}
+                              title={b.client_onboarding_enabled ? 'Click to disable Client Onboarding' : 'Click to enable Client Onboarding'}
+                            >
+                              <Users className="w-3.5 h-3.5" />
+                              <span>{b.client_onboarding_enabled ? 'Active' : 'Disabled'}</span>
+                            </button>
+                            {b.client_onboarding_requested && !b.client_onboarding_enabled && (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 font-semibold bg-amber-950/60 border border-amber-500/30 px-1.5 py-0.5 rounded animate-pulse">
+                                ⚡ Requested
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         <td className="py-4 px-4">
