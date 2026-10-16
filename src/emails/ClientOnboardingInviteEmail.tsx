@@ -17,6 +17,7 @@ export interface ClientOnboardingInviteEmailProps {
   clientName?: string;
   onboardingUrl: string;
   customMessage?: string;
+  replyToEmail?: string;
 }
 
 export function ClientOnboardingInviteEmail({

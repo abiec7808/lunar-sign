@@ -58,13 +58,13 @@ export async function POST(req: NextRequest) {
     const proto = req.headers.get('x-forwarded-proto') || 'https';
     const baseUrl = host ? `${proto}://${host}` : undefined;
 
-    const { submission, inviteUrl } = await createOnboardingInvite(access.effectiveOrgId, {
+    const { submission, inviteUrl, emailSent } = await createOnboardingInvite(access.effectiveOrgId, {
       ...validated,
       email: validated.email ? validated.email : undefined,
       baseUrl,
     });
 
-    return NextResponse.json({ success: true, submission, inviteUrl });
+    return NextResponse.json({ success: true, submission, inviteUrl, emailSent });
   } catch (err: any) {
     console.error('Error generating onboarding invite:', err);
     return NextResponse.json({ error: err.message || 'Failed to generate invite' }, { status: 500 });

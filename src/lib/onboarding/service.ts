@@ -380,7 +380,7 @@ export async function createOnboardingInvite(
     sendEmail?: boolean;
     baseUrl?: string;
   }
-): Promise<{ submission: OnboardingSubmission; inviteUrl: string }> {
+): Promise<{ submission: OnboardingSubmission; inviteUrl: string; emailSent?: boolean }> {
   // Ensure template exists
   const template = await getOnboardingTemplate(orgId);
 
@@ -416,28 +416,112 @@ export async function createOnboardingInvite(
     'https://lunar-sign.netlify.app';
   const inviteUrl = `${domain}/onboard/${token}`;
 
-  // Send invitation email in background so response returns instantly
+  // Await email dispatch so serverless lambda execution does not freeze before delivery
+  let emailSent = false;
   if (params.sendEmail && params.email) {
-    dbQuery(
-      `SELECT name FROM organisations WHERE id = $1 LIMIT 1`,
-      [orgId]
-    )
-      .then((orgRes) => {
-        const orgName = orgRes.rows[0]?.name || 'Lunar Sign Partner';
-        return emailService.sendClientOnboardingInvite({
-          to: params.email!.trim().toLowerCase(),
-          businessName: orgName,
-          clientName: fullName || params.companyName || 'Valued Client',
-          onboardingUrl: inviteUrl,
-          customMessage: params.customMessage,
-        });
-      })
-      .catch((emailErr) => {
-        console.warn('Warning sending client onboarding invite email:', emailErr);
+    try {
+      const orgRes = await dbQuery(
+        `SELECT name, reply_to_email FROM organisations WHERE id = $1 LIMIT 1`,
+        [orgId]
+      );
+      const orgName = orgRes.rows[0]?.name || 'Lunar Sign Partner';
+      const replyToEmail = orgRes.rows[0]?.reply_to_email || undefined;
+      emailSent = await emailService.sendClientOnboardingInvite({
+        to: params.email.trim().toLowerCase(),
+        businessName: orgName,
+        clientName: fullName || params.companyName || 'Valued Client',
+        onboardingUrl: inviteUrl,
+        customMessage: params.customMessage,
+        replyToEmail,
+        force: true,
       });
+      console.log(`[Onboarding] Invite email sent to ${params.email}:`, emailSent);
+    } catch (emailErr) {
+      console.error('Warning sending client onboarding invite email:', emailErr);
+    }
   }
 
-  return { submission, inviteUrl };
+  return { submission, inviteUrl, emailSent };
+}
+
+/**
+ * Resend an onboarding invitation email to the client for an existing submission.
+ */
+export async function resendOnboardingInvite(
+  submissionId: string,
+  session: UserSession | null,
+  overrideEmail?: string,
+  customMessage?: string,
+  baseUrl?: string
+): Promise<{ success: boolean; recipientEmail: string; message: string }> {
+  if (!session) {
+    throw new Error('Authentication required');
+  }
+
+  // 1. Fetch submission with organisation details
+  const subRes = await dbQuery(
+    `SELECT s.*, o.name as org_name, o.reply_to_email as org_reply_to_email
+     FROM onboarding_submissions s
+     JOIN organisations o ON s.org_id = o.id
+     WHERE s.id::text = $1
+     LIMIT 1`,
+    [submissionId]
+  );
+
+  if (subRes.rows.length === 0) {
+    throw new Error('Onboarding submission record not found.');
+  }
+
+  const sub = subRes.rows[0];
+  const isSuper = Boolean(
+    session.isSuperAdmin || session.email === 'admin@lunarposgeorge.co.za'
+  );
+
+  if (!isSuper && sub.org_id !== session.orgId) {
+    throw new Error('Unauthorized. You can only resend invitations for your own business.');
+  }
+
+  const recipient = (overrideEmail || sub.email || '').trim().toLowerCase();
+  if (!recipient || !recipient.includes('@')) {
+    throw new Error('A valid recipient email address is required.');
+  }
+
+  // If email was updated, update the submission record
+  if (overrideEmail && overrideEmail.trim().toLowerCase() !== sub.email) {
+    await dbQuery(
+      `UPDATE onboarding_submissions SET email = $1, updated_at = NOW() WHERE id::text = $2`,
+      [recipient, submissionId]
+    );
+  }
+
+  const domain =
+    baseUrl ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    'https://lunar-sign.netlify.app';
+  const inviteUrl = `${domain}/onboard/${sub.token}`;
+
+  const displayName = sub.full_name || sub.company_name || 'Valued Client';
+  const orgName = sub.org_name || 'Lunar Sign Partner';
+
+  const ok = await emailService.sendClientOnboardingInvite({
+    to: recipient,
+    businessName: orgName,
+    clientName: displayName,
+    onboardingUrl: inviteUrl,
+    customMessage: customMessage || undefined,
+    replyToEmail: sub.org_reply_to_email || undefined,
+    force: true,
+  });
+
+  if (!ok) {
+    throw new Error('Failed to dispatch invitation email. Please verify the recipient email address.');
+  }
+
+  return {
+    success: true,
+    recipientEmail: recipient,
+    message: `Onboarding invitation successfully resent to ${recipient}`,
+  };
 }
 
 /**

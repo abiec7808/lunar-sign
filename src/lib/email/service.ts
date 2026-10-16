@@ -20,6 +20,7 @@ export interface SendEmailOptions {
   documentId?: string;
   recipientId?: string;
   templateName: string;
+  replyTo?: string;
   force?: boolean;
 }
 
@@ -66,7 +67,7 @@ export class ResendEmailService implements IEmailService {
       const { data, error } = await this.resend.emails.send({
         from: this.fromEmail,
         to: [to],
-        replyTo: this.replyToEmail,
+        replyTo: options.replyTo || this.replyToEmail,
         subject,
         html,
         text,
@@ -252,6 +253,7 @@ export class ResendEmailService implements IEmailService {
       subject: `📋 Client Onboarding Invitation from ${props.businessName}`,
       reactElement: React.createElement(ClientOnboardingInviteEmail, props),
       templateName: 'client_onboarding_invite',
+      replyTo: props.replyToEmail,
       force: props.force,
     });
     return res.success;
@@ -346,7 +348,7 @@ export class DirectSmtpEmailService implements IEmailService {
         },
         sender: this.smtpUser,
         to,
-        replyTo: this.smtpUser,
+        replyTo: options.replyTo || this.smtpUser,
         subject,
         text,
         html,
@@ -532,6 +534,7 @@ export class DirectSmtpEmailService implements IEmailService {
       subject: `📋 Client Onboarding Invitation from ${props.businessName}`,
       reactElement: React.createElement(ClientOnboardingInviteEmail, props),
       templateName: 'client_onboarding_invite',
+      replyTo: props.replyToEmail,
       force: props.force,
     });
     return res.success;
@@ -552,7 +555,113 @@ export class DirectSmtpEmailService implements IEmailService {
   }
 }
 
-export const emailService: IEmailService = process.env.RESEND_API_KEY
-  ? new ResendEmailService()
-  : new DirectSmtpEmailService();
+/**
+ * High-reliability email service that dispatches via Resend API and automatically
+ * falls back to Direct SMTP (mail.lunarposgeorge.co.za) if any provider error occurs.
+ */
+class ReliableEmailService implements IEmailService {
+  private primary: IEmailService;
+  private fallback: IEmailService;
+
+  constructor() {
+    this.primary = process.env.RESEND_API_KEY
+      ? new ResendEmailService()
+      : new DirectSmtpEmailService();
+    this.fallback = new DirectSmtpEmailService();
+  }
+
+  async sendEmail(options: SendEmailOptions) {
+    try {
+      const res = await this.primary.sendEmail(options);
+      if (res.success) return res;
+      console.warn('[EmailService] Primary provider failed, falling back to SMTP:', res.error);
+      return await this.fallback.sendEmail(options);
+    } catch (err: any) {
+      console.warn('[EmailService] Primary provider threw, falling back to SMTP:', err?.message);
+      return await this.fallback.sendEmail(options);
+    }
+  }
+
+  async sendSignatureRequest(props: any) {
+    try {
+      const ok = await this.primary.sendSignatureRequest(props);
+      if (ok) return true;
+    } catch {}
+    return this.fallback.sendSignatureRequest(props);
+  }
+
+  async sendDocumentCompleted(props: any) {
+    try {
+      const ok = await this.primary.sendDocumentCompleted(props);
+      if (ok) return true;
+    } catch {}
+    return this.fallback.sendDocumentCompleted(props);
+  }
+
+  async sendSignedConfirmation(props: any) {
+    try {
+      const ok = await this.primary.sendSignedConfirmation(props);
+      if (ok) return true;
+    } catch {}
+    return this.fallback.sendSignedConfirmation(props);
+  }
+
+  async sendReminder(props: any) {
+    try {
+      const ok = await this.primary.sendReminder(props);
+      if (ok) return true;
+    } catch {}
+    return this.fallback.sendReminder(props);
+  }
+
+  async sendDeclined(props: any) {
+    try {
+      const ok = await this.primary.sendDeclined(props);
+      if (ok) return true;
+    } catch {}
+    return this.fallback.sendDeclined(props);
+  }
+
+  async sendVoided(props: any) {
+    try {
+      const ok = await this.primary.sendVoided(props);
+      if (ok) return true;
+    } catch {}
+    return this.fallback.sendVoided(props);
+  }
+
+  async sendNewRegistrationAlert(props: any) {
+    try {
+      const ok = await this.primary.sendNewRegistrationAlert(props);
+      if (ok) return true;
+    } catch {}
+    return this.fallback.sendNewRegistrationAlert(props);
+  }
+
+  async sendClientOnboardingRequestAlert(props: any) {
+    try {
+      const ok = await this.primary.sendClientOnboardingRequestAlert(props);
+      if (ok) return true;
+    } catch {}
+    return this.fallback.sendClientOnboardingRequestAlert(props);
+  }
+
+  async sendClientOnboardingInvite(props: any) {
+    try {
+      const ok = await this.primary.sendClientOnboardingInvite(props);
+      if (ok) return true;
+    } catch {}
+    return this.fallback.sendClientOnboardingInvite(props);
+  }
+
+  async sendClientOnboardingCompleted(props: any) {
+    try {
+      const ok = await this.primary.sendClientOnboardingCompleted(props);
+      if (ok) return true;
+    } catch {}
+    return this.fallback.sendClientOnboardingCompleted(props);
+  }
+}
+
+export const emailService: IEmailService = new ReliableEmailService();
 

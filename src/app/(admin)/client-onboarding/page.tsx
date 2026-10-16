@@ -81,6 +81,11 @@ export default function ClientOnboardingPage() {
   });
   const [generatedInviteUrl, setGeneratedInviteUrl] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [inviteEmailSent, setInviteEmailSent] = useState<boolean | null>(null);
+
+  // Resend invitation state
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [resendSuccessToast, setResendSuccessToast] = useState<string | null>(null);
 
   // Template / Questionnaire Builder state
   const [template, setTemplate] = useState<OnboardingTemplate | null>(null);
@@ -212,6 +217,7 @@ export default function ClientOnboardingPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to create invite');
 
       setGeneratedInviteUrl(data.inviteUrl);
+      setInviteEmailSent(Boolean(data.emailSent));
       await fetchOrgData();
     } catch (err: any) {
       alert(err.message || 'Error generating link');
@@ -224,6 +230,44 @@ export default function ClientOnboardingPage() {
     navigator.clipboard.writeText(url);
     setCopiedUrl(url);
     setTimeout(() => setCopiedUrl(null), 2500);
+  };
+
+  // Resend onboarding invitation email
+  const handleResendInvite = async (submission: OnboardingSubmission) => {
+    let targetEmail = submission.email;
+    if (!targetEmail || !targetEmail.includes('@')) {
+      const promptEmail = window.prompt(
+        'Please enter the client email address to send the onboarding invitation to:',
+        submission.email || ''
+      );
+      if (!promptEmail || !promptEmail.includes('@')) {
+        alert('A valid email address is required to send the invitation.');
+        return;
+      }
+      targetEmail = promptEmail.trim();
+    }
+
+    setResendingId(submission.id);
+    try {
+      const res = await fetch(`/api/onboarding/submissions/${submission.id}/resend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ overrideEmail: targetEmail }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to resend invitation email');
+      }
+
+      setResendSuccessToast(`Invitation email successfully resent to ${targetEmail}!`);
+      setTimeout(() => setResendSuccessToast(null), 4000);
+      await fetchOrgData();
+    } catch (err: any) {
+      alert(err.message || 'Error resending invitation');
+    } finally {
+      setResendingId(null);
+    }
   };
 
   // Save template / questionnaire for the active business
@@ -440,6 +484,22 @@ export default function ClientOnboardingPage() {
           </div>
         )}
 
+        {/* Success Toast */}
+        {resendSuccessToast && (
+          <div className="bg-emerald-950/90 border border-emerald-500/50 text-emerald-200 px-4 py-3 rounded-xl flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center gap-2 text-xs font-semibold">
+              <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{resendSuccessToast}</span>
+            </div>
+            <button
+              onClick={() => setResendSuccessToast(null)}
+              className="text-slate-400 hover:text-white text-xs px-2"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Navigation Tabs */}
         <div className="flex border-b border-slate-800 gap-4">
           <button
@@ -636,6 +696,26 @@ export default function ClientOnboardingPage() {
 
                             <td className="py-4 px-4 text-right">
                               <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={resendingId === s.id}
+                                  onClick={() => handleResendInvite(s)}
+                                  className="h-8 text-xs border-indigo-700/60 bg-indigo-950/40 hover:bg-indigo-900/60 text-indigo-200"
+                                  title={`Resend onboarding link to ${s.email || 'client'}`}
+                                >
+                                  {resendingId === s.id ? (
+                                    <>
+                                      <div className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin mr-1" />
+                                      Sending...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Send className="w-3.5 h-3.5 mr-1 text-indigo-400" /> Resend
+                                    </>
+                                  )}
+                                </Button>
+
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -1054,7 +1134,9 @@ export default function ClientOnboardingPage() {
                 </div>
                 <p className="text-slate-300 text-[11px]">
                   {inviteForm.sendEmail && inviteForm.email
-                    ? `An invitation email was dispatched to ${inviteForm.email}. You can also copy the direct link below:`
+                    ? inviteEmailSent
+                      ? `✓ An invitation email was successfully dispatched to ${inviteForm.email}. You can also copy the direct link below:`
+                      : `Onboarding link generated for ${inviteForm.email}. You can copy the direct link below:`
                     : 'Share this link with your client. Once submitted, their details will automatically appear in your client list.'}
                 </p>
               </div>
@@ -1199,7 +1281,38 @@ export default function ClientOnboardingPage() {
               )}
             </div>
 
-            <DialogFooter className="border-t border-slate-800 pt-3">
+            <DialogFooter className="border-t border-slate-800 pt-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={resendingId === selectedSubmission.id}
+                  onClick={() => handleResendInvite(selectedSubmission)}
+                  className="text-xs border-indigo-700/60 bg-indigo-950/40 hover:bg-indigo-900/60 text-indigo-200"
+                >
+                  {resendingId === selectedSubmission.id ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin mr-1.5" />
+                      Resending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5 mr-1.5 text-indigo-400" /> Resend Onboarding Invitation
+                    </>
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const url = `${window.location.origin}/onboard/${selectedSubmission.token}`;
+                    handleCopyLink(url);
+                  }}
+                  className="text-xs border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200"
+                >
+                  <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
+                </Button>
+              </div>
               <Button
                 variant="outline"
                 onClick={() => setSelectedSubmission(null)}
