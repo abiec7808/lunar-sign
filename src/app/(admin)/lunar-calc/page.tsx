@@ -50,6 +50,7 @@ export default function LunarCalcPage() {
   const [activeTab, setActiveTab] = useState<'clients' | 'products'>('clients');
   const [user, setUser] = useState<any>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isModuleEnabled, setIsModuleEnabled] = useState(true);
   const [businesses, setBusinesses] = useState<BusinessOption[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>('');
 
@@ -118,6 +119,8 @@ export default function LunarCalcPage() {
           );
           setIsSuperAdmin(superAdmin);
           setSelectedOrgId(data.user.orgId);
+          const enabled = superAdmin || Boolean(data.user.lunarCalcEnabled);
+          setIsModuleEnabled(enabled);
 
           if (superAdmin) {
             // Load all businesses for super admin selector
@@ -134,6 +137,8 @@ export default function LunarCalcPage() {
         }
       } catch (err: any) {
         setError('Failed to authenticate');
+      } finally {
+        setIsLoading(false);
       }
     }
     loadAuth();
@@ -182,10 +187,10 @@ export default function LunarCalcPage() {
   };
 
   useEffect(() => {
-    if (selectedOrgId) {
+    if (selectedOrgId && (isModuleEnabled || isSuperAdmin)) {
       fetchData();
     }
-  }, [selectedOrgId]);
+  }, [selectedOrgId, isModuleEnabled, isSuperAdmin]);
 
   // Toggle client expanded card
   const toggleClientExpand = (id: string) => {
@@ -545,6 +550,35 @@ export default function LunarCalcPage() {
     }
     return user?.orgName || 'LunarPOS George';
   }, [businesses, selectedOrgId, user]);
+
+  // Module Disabled View for businesses
+  if (!isLoading && !isModuleEnabled && !isSuperAdmin) {
+    return (
+      <div className="flex-1 flex flex-col min-w-0 bg-[#090d16] text-slate-100 min-h-screen">
+        <AdminHeader
+          title="Lunar Calc 🧮"
+          subtitle="Software cost vs selling price calculator & profit aggregator"
+        />
+        <div className="p-6 md:p-12 max-w-4xl mx-auto w-full flex-1 flex flex-col justify-center items-center">
+          <div className="relative overflow-hidden rounded-3xl border border-indigo-500/20 bg-gradient-to-b from-indigo-950/30 via-slate-900/80 to-slate-950 p-8 sm:p-12 shadow-2xl backdrop-blur-xl text-center w-full">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mx-auto mb-6 shadow-inner">
+              <Calculator className="w-8 h-8 text-indigo-400" />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-3">
+              Lunar Calc is Disabled for Your Account
+            </h1>
+            <p className="text-slate-300 text-sm sm:text-base leading-relaxed max-w-xl mx-auto mb-6">
+              This module must be enabled by the platform administrator before your business can access the software license calculator, client cost analysis, and profit statements.
+            </p>
+            <div className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/60 text-slate-400 text-xs font-mono">
+              <Info className="w-4 h-4 text-slate-400" />
+              <span>Contact your platform administrator to request access.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-[#090d16] text-slate-100 min-h-screen">

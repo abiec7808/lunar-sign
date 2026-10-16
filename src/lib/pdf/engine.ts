@@ -248,11 +248,29 @@ export async function stampAndFlattenPdf(options: StampOptions): Promise<StampRe
             const imgBuffer = Buffer.from(base64Data, 'base64');
             const embeddedImg = await pdfDoc.embedPng(imgBuffer);
 
+            // Proportional scaling to preserve natural aspect ratio and avoid squashing
+            const imgAspect = embeddedImg.width / (embeddedImg.height || 1);
+            const boxAspect = fieldW / (fieldH || 1);
+            let drawW = fieldW;
+            let drawH = fieldH;
+            let drawX = fieldX;
+            let drawY = fieldY;
+
+            if (imgAspect > boxAspect) {
+              drawW = fieldW;
+              drawH = fieldW / imgAspect;
+              drawY = fieldY + (fieldH - drawH) / 2;
+            } else {
+              drawH = fieldH;
+              drawW = fieldH * imgAspect;
+              drawX = fieldX + (fieldW - drawW) / 2;
+            }
+
             page.drawImage(embeddedImg, {
-              x: fieldX,
-              y: fieldY,
-              width: fieldW,
-              height: fieldH,
+              x: drawX,
+              y: drawY,
+              width: drawW,
+              height: drawH,
             });
           } else if (sig.method === 'typed') {
             page.drawText(sig.signature_data, {
@@ -425,11 +443,25 @@ async function drawDigitalSignatureApprovalSection(
           const base64Data = sigRecord.signature_data.replace(/^data:image\/\w+;base64,/, '');
           const imgBuffer = Buffer.from(base64Data, 'base64');
           const embeddedImg = await pdfDoc.embedPng(imgBuffer);
+          const maxBoxW = 140;
+          const maxBoxH = 45;
+          const imgAspect = embeddedImg.width / (embeddedImg.height || 1);
+          const boxAspect = maxBoxW / maxBoxH;
+          let drawW = maxBoxW;
+          let drawH = maxBoxH;
+          if (imgAspect > boxAspect) {
+            drawW = maxBoxW;
+            drawH = maxBoxW / imgAspect;
+          } else {
+            drawH = maxBoxH;
+            drawW = maxBoxH * imgAspect;
+          }
+
           execPage.drawImage(embeddedImg, {
-            x: boxX + 15,
-            y: boxY + boxHeight - 75,
-            width: 140,
-            height: 45,
+            x: boxX + 15 + (maxBoxW - drawW) / 2,
+            y: boxY + boxHeight - 75 + (maxBoxH - drawH) / 2,
+            width: drawW,
+            height: drawH,
           });
         } else {
           execPage.drawText(sigRecord.signature_data, {

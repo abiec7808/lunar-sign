@@ -35,14 +35,28 @@ import {
   HelpCircle,
   FileText,
   Printer,
+  AlertCircle,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { formatSaDate } from '@/lib/dates';
 import { OnboardingQuestion, OnboardingSubmission, OnboardingTemplate } from '@/lib/onboarding/service';
+
+interface BusinessItem {
+  id: string;
+  name: string;
+  slug: string;
+  client_onboarding_enabled?: boolean;
+}
 
 export default function ClientOnboardingPage() {
   const [activeTab, setActiveTab] = useState<'submissions' | 'builder'>('submissions');
   const [isLoading, setIsLoading] = useState(true);
   const [isModuleEnabled, setIsModuleEnabled] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
+  const [businesses, setBusinesses] = useState<BusinessItem[]>([]);
+
   const [isRequested, setIsRequested] = useState(false);
   const [requestLoading, setRequestLoading] = useState(false);
   const [requestSuccess, setRequestSuccess] = useState(false);
@@ -73,45 +87,80 @@ export default function ClientOnboardingPage() {
   const [builderSaving, setBuilderSaving] = useState(false);
   const [saveSuccessToast, setSaveSuccessToast] = useState(false);
 
-  // Load user access & initial data
-  const loadData = async () => {
-    setIsLoading(true);
+  // 1. Load initial user and business access
+  useEffect(() => {
+    async function loadAuth() {
+      try {
+        setIsLoading(true);
+        const authRes = await fetch('/api/auth/me');
+        const authData = await authRes.json();
+        const user = authData.user;
+
+        if (!user) {
+          setIsLoading(false);
+          return;
+        }
+
+        const superAdmin = Boolean(
+          user.isSuperAdmin || user.email === 'admin@lunarposgeorge.co.za'
+        );
+        setIsSuperAdmin(superAdmin);
+        setSelectedOrgId(user.orgId);
+
+        if (superAdmin) {
+          setIsModuleEnabled(true);
+          // Load all businesses for super admin business selector
+          try {
+            const bRes = await fetch('/api/super-admin/businesses');
+            const bData = await bRes.json();
+            if (bData.businesses) {
+              setBusinesses(bData.businesses);
+            }
+          } catch (bErr) {
+            console.warn('Failed to load businesses list for selector:', bErr);
+          }
+        } else {
+          setIsModuleEnabled(Boolean(user.clientOnboardingEnabled));
+          setIsRequested(Boolean(user.clientOnboardingRequested));
+        }
+      } catch (err) {
+        console.error('Failed to load auth data in onboarding page:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadAuth();
+  }, []);
+
+  // 2. Load submissions & template whenever selectedOrgId changes
+  const fetchOrgData = async () => {
+    if (!selectedOrgId) return;
     try {
-      const authRes = await fetch('/api/auth/me');
-      const authData = await authRes.json();
-      const user = authData.user;
+      const orgParam = isSuperAdmin ? `?org_id=${selectedOrgId}` : '';
+      const [subRes, tmplRes] = await Promise.all([
+        fetch(`/api/onboarding/submissions${orgParam}`),
+        fetch(`/api/onboarding/template${orgParam}`),
+      ]);
 
-      if (user?.clientOnboardingEnabled) {
-        setIsModuleEnabled(true);
-        // Load submissions & template
-        const [subRes, tmplRes] = await Promise.all([
-          fetch('/api/onboarding/submissions'),
-          fetch('/api/onboarding/template'),
-        ]);
+      if (subRes.ok) {
+        const sData = await subRes.json();
+        setSubmissions(sData.submissions || []);
+      }
 
-        if (subRes.ok) {
-          const sData = await subRes.json();
-          setSubmissions(sData.submissions || []);
-        }
-
-        if (tmplRes.ok) {
-          const tData = await tmplRes.json();
-          setTemplate(tData.template || null);
-        }
-      } else {
-        setIsModuleEnabled(false);
-        setIsRequested(Boolean(user?.clientOnboardingRequested));
+      if (tmplRes.ok) {
+        const tData = await tmplRes.json();
+        setTemplate(tData.template || null);
       }
     } catch (err) {
-      console.error('Failed to load onboarding data:', err);
-    } finally {
-      setIsLoading(false);
+      console.error('Failed to load submissions and template:', err);
     }
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (selectedOrgId && (isModuleEnabled || isSuperAdmin)) {
+      fetchOrgData();
+    }
+  }, [selectedOrgId, isModuleEnabled, isSuperAdmin]);
 
   // Request module activation
   const handleRequestModule = async () => {
@@ -129,12 +178,31 @@ export default function ClientOnboardingPage() {
     }
   };
 
-  // Generate new invite link
+  // Generate new invite link (Strict Validation: Name, Surname, Company, Contact Number are NOT optional)
   const handleCreateInvite = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!inviteForm.firstName.trim() || !inviteForm.lastName.trim()) {
+      alert('First name and surname are required.');
+      return;
+    }
+    if (!inviteForm.companyName.trim()) {
+      alert('Company / Business name is required.');
+      return;
+    }
+    if (!inviteForm.contactNumber.trim()) {
+      alert('Contact number is required.');
+      return;
+    }
+    if (!inviteForm.email.trim() || !inviteForm.email.includes('@')) {
+      alert('A valid email address is required.');
+      return;
+    }
+
     setInviteLoading(true);
     try {
-      const res = await fetch('/api/onboarding/submissions', {
+      const orgParam = isSuperAdmin ? `?org_id=${selectedOrgId}` : '';
+      const res = await fetch(`/api/onboarding/submissions${orgParam}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(inviteForm),
@@ -144,12 +212,7 @@ export default function ClientOnboardingPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to create invite');
 
       setGeneratedInviteUrl(data.inviteUrl);
-      // Reload submissions
-      const subRes = await fetch('/api/onboarding/submissions');
-      if (subRes.ok) {
-        const sData = await subRes.json();
-        setSubmissions(sData.submissions || []);
-      }
+      await fetchOrgData();
     } catch (err: any) {
       alert(err.message || 'Error generating link');
     } finally {
@@ -163,12 +226,13 @@ export default function ClientOnboardingPage() {
     setTimeout(() => setCopiedUrl(null), 2500);
   };
 
-  // Save template / questionnaire
+  // Save template / questionnaire for the active business
   const handleSaveTemplate = async () => {
     if (!template) return;
     setBuilderSaving(true);
     try {
-      const res = await fetch('/api/onboarding/template', {
+      const orgParam = isSuperAdmin ? `?org_id=${selectedOrgId}` : '';
+      const res = await fetch(`/api/onboarding/template${orgParam}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(template),
@@ -195,7 +259,7 @@ export default function ClientOnboardingPage() {
       id: `q_${Date.now()}`,
       label: 'New Question',
       type: 'text',
-      required: false,
+      required: true, // Default to required as per user preference
       placeholder: 'Enter details here...',
       helpText: '',
       options: ['Option 1', 'Option 2'],
@@ -259,26 +323,25 @@ export default function ClientOnboardingPage() {
     );
   }
 
-  // 1. MODULE NOT ENABLED VIEW
-  if (!isModuleEnabled) {
+  // 1. MODULE DISABLED FOR THIS BUSINESS (Non-Super Admin)
+  if (!isModuleEnabled && !isSuperAdmin) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-        <AdminHeader title="Client Onboarding" subtitle="Interactive Onboarding & E-Signature Module" />
+        <AdminHeader title="Client Onboarding" subtitle="Module Disabled by Administrator" />
 
         <div className="p-4 sm:p-8 max-w-5xl mx-auto w-full space-y-8 flex-1">
-          {/* Hero Banner */}
-          <div className="relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-950/60 via-slate-900 to-slate-950 p-6 sm:p-10 shadow-2xl">
-            <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+          {/* Module Disabled Notice Card */}
+          <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 p-6 sm:p-10 shadow-2xl">
             <div className="relative z-10 max-w-2xl">
-              <Badge className="mb-4 bg-indigo-500/20 text-indigo-300 border-indigo-500/40 px-3 py-1 text-xs font-semibold gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                Premium Module
+              <Badge className="mb-4 bg-amber-500/20 text-amber-300 border-amber-500/40 px-3 py-1 text-xs font-semibold gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                Module Not Enabled
               </Badge>
               <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight mb-3">
-                Automated Client Onboarding & Custom Questionnaires
+                Client Onboarding is Disabled for Your Account
               </h1>
               <p className="text-slate-300 text-sm sm:text-base leading-relaxed mb-6">
-                Onboard new clients smoothly with custom questions tailored to your business, legally binding electronic signatures under SA ECTA 25 of 2002, and automatic synchronization directly into your <strong>Client List & Address Book</strong>.
+                This feature must be activated by the platform administrator before your business can send client onboarding invitations and build custom questionnaires.
               </p>
 
               {/* Action Button / Status */}
@@ -286,7 +349,7 @@ export default function ClientOnboardingPage() {
                 {isRequested || requestSuccess ? (
                   <div className="inline-flex items-center gap-2.5 px-5 py-3 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-300 text-sm font-semibold shadow-lg">
                     <Clock className="w-5 h-5 text-amber-400 animate-pulse" />
-                    <span>Activation Request Submitted — Pending Super Admin Approval</span>
+                    <span>Activation Request Submitted — Pending Administrator Approval</span>
                   </div>
                 ) : (
                   <Button
@@ -303,7 +366,7 @@ export default function ClientOnboardingPage() {
                     ) : (
                       <>
                         <UserPlus className="w-5 h-5 mr-2" />
-                        Request Client Onboarding Module
+                        Request Activation from Administrator
                       </>
                     )}
                   </Button>
@@ -311,56 +374,19 @@ export default function ClientOnboardingPage() {
               </div>
             </div>
           </div>
-
-          {/* Features Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="bg-slate-900/60 border-slate-800">
-              <CardContent className="p-6 space-y-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-950 border border-indigo-800 flex items-center justify-center text-indigo-400">
-                  <Settings2 className="w-5 h-5" />
-                </div>
-                <h3 className="text-base font-bold text-white">Custom Questionnaire Builder</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Every business is different. Build your own questions, select from dropdowns, text areas, or checkboxes, and collect industry-specific details effortlessly.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-slate-900/60 border-slate-800">
-              <CardContent className="p-6 space-y-3">
-                <div className="w-10 h-10 rounded-xl bg-cyan-950 border border-cyan-800 flex items-center justify-center text-cyan-400">
-                  <FileSignature className="w-5 h-5" />
-                </div>
-                <h3 className="text-base font-bold text-white">SA ECTA 25 E-Signatures</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Collect digital drawn or typed signatures, IP timestamps, and statutory declarations. Completely legally binding under South African electronic law.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-slate-900/60 border-slate-800">
-              <CardContent className="p-6 space-y-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-800 flex items-center justify-center text-emerald-400">
-                  <Users className="w-5 h-5" />
-                </div>
-                <h3 className="text-base font-bold text-white">Automatic Client List Sync</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Once a client submits their unique link, their business details, contact person, mobile, and landline are automatically inserted into your Client List & Address Book.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
         </div>
       </div>
     );
   }
 
   // 2. MODULE ENABLED VIEW
+  const activeBusinessName = businesses.find((b) => b.id === selectedOrgId)?.name || 'My Business';
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       <AdminHeader
         title="Client Onboarding"
-        subtitle="Manage client registrations, unique links, and custom questionnaires"
+        subtitle={`Custom questionnaire & client list sync • ${activeBusinessName}`}
         actionButton={
           <Button
             onClick={() => {
@@ -384,6 +410,36 @@ export default function ClientOnboardingPage() {
       />
 
       <div className="p-4 sm:p-6 md:p-8 space-y-6 flex-1 max-w-7xl mx-auto w-full">
+        {/* Super Admin Business Scope Dropdown */}
+        {isSuperAdmin && businesses.length > 0 && (
+          <div className="bg-indigo-950/40 border border-indigo-800/40 p-3.5 rounded-xl flex flex-wrap items-center justify-between gap-3 shadow">
+            <div className="flex items-center gap-2.5">
+              <Building2 className="w-4 h-4 text-indigo-400 shrink-0" />
+              <span className="text-xs font-semibold text-indigo-200">
+                Super Admin Business Scope:
+              </span>
+              <select
+                value={selectedOrgId}
+                onChange={(e) => setSelectedOrgId(e.target.value)}
+                className="bg-slate-900 border border-indigo-700/60 rounded-lg text-xs font-medium text-white px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              >
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} {b.client_onboarding_enabled ? '★' : '(Onboarding Disabled)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <Badge
+              variant="outline"
+              className="text-[11px] font-mono text-cyan-400 border-cyan-500/30 bg-cyan-950/30"
+            >
+              Every business has its own unique questionnaire
+            </Badge>
+          </div>
+        )}
+
         {/* Navigation Tabs */}
         <div className="flex border-b border-slate-800 gap-4">
           <button
@@ -629,7 +685,7 @@ export default function ClientOnboardingPage() {
                   Custom Onboarding Questionnaire Builder
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  Customize the exact questions your clients must answer when onboarding with your business.
+                  Configuring questionnaire for: <strong className="text-slate-200">{activeBusinessName}</strong>
                 </p>
               </div>
 
@@ -637,7 +693,7 @@ export default function ClientOnboardingPage() {
                 <Button
                   onClick={handleSaveTemplate}
                   disabled={builderSaving}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm px-5"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm px-5 shadow-lg shadow-emerald-600/20"
                 >
                   {builderSaving ? (
                     'Saving...'
@@ -705,10 +761,15 @@ export default function ClientOnboardingPage() {
             {/* Dynamic Questions List */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                  <HelpCircle className="w-4 h-4 text-cyan-400" />
-                  Questionnaire Fields ({template.questions.length})
-                </h4>
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <HelpCircle className="w-4 h-4 text-cyan-400" />
+                    Questionnaire Fields ({template.questions.length})
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Click the <strong className="text-slate-300">Required / Optional</strong> badge on any question to toggle whether the client must complete it.
+                  </p>
+                </div>
                 <Button
                   size="sm"
                   onClick={handleAddQuestion}
@@ -722,18 +783,34 @@ export default function ClientOnboardingPage() {
                 <Card key={q.id} className="bg-slate-900/60 border-slate-800 relative group">
                   <CardContent className="p-4 sm:p-5 space-y-4">
                     <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
                         <span className="w-6 h-6 rounded-md bg-indigo-950 border border-indigo-800/60 text-indigo-300 text-xs font-bold flex items-center justify-center">
                           {idx + 1}
                         </span>
-                        <span className="text-xs font-semibold text-slate-300">
+                        <span className="text-xs font-semibold text-slate-200">
                           {q.label || 'Untitled Question'}
                         </span>
-                        {q.required && (
-                          <Badge variant="outline" className="text-[10px] bg-red-950/40 border-red-500/30 text-red-400">
-                            Required
-                          </Badge>
-                        )}
+
+                        {/* Interactive Required / Optional Toggle Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQuestion(idx, { required: !q.required })}
+                          className={`text-xs px-2.5 py-1 rounded-lg font-semibold border flex items-center gap-1.5 transition-all ${
+                            q.required
+                              ? 'bg-rose-950/70 border-rose-500/50 text-rose-300 hover:bg-rose-900/70'
+                              : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                          }`}
+                          title="Click to toggle mandatory or optional"
+                        >
+                          {q.required ? (
+                            <>
+                              <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse" />
+                              <span>Required *</span>
+                            </>
+                          ) : (
+                            <span>Optional</span>
+                          )}
+                        </button>
                       </div>
 
                       <div className="flex items-center gap-1">
@@ -818,7 +895,7 @@ export default function ClientOnboardingPage() {
                     {['select', 'radio', 'checkbox'].includes(q.type) && (
                       <div className="space-y-2 bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
                         <Label className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
-                          Options (comma separated or editable list)
+                          Options (comma separated)
                         </Label>
                         <Input
                           value={(q.options || []).join(', ')}
@@ -832,19 +909,6 @@ export default function ClientOnboardingPage() {
                         />
                       </div>
                     )}
-
-                    <div className="flex items-center gap-2 pt-1">
-                      <input
-                        type="checkbox"
-                        id={`req_${q.id}`}
-                        checked={q.required}
-                        onChange={(e) => handleUpdateQuestion(idx, { required: e.target.checked })}
-                        className="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-0"
-                      />
-                      <label htmlFor={`req_${q.id}`} className="text-xs text-slate-300 select-none cursor-pointer">
-                        Mark this question as strictly mandatory for the client
-                      </label>
-                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -859,61 +923,80 @@ export default function ClientOnboardingPage() {
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-indigo-400" />
-              Generate Unique Client Onboarding Link
+              Generate Client Onboarding Link
             </DialogTitle>
           </DialogHeader>
 
           {!generatedInviteUrl ? (
             <form onSubmit={handleCreateInvite} className="space-y-4 pt-2">
+              <p className="text-xs text-slate-400">
+                Please provide the client and business credentials to issue their unique onboarding link.
+              </p>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-300">Client First Name (Optional)</Label>
+                  <Label className="text-xs text-slate-300">
+                    Client First Name <span className="text-rose-400 font-bold">*</span>
+                  </Label>
                   <Input
                     placeholder="e.g. Johan"
                     value={inviteForm.firstName}
                     onChange={(e) => setInviteForm({ ...inviteForm, firstName: e.target.value })}
                     className="bg-slate-900 border-slate-800 text-xs"
+                    required
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-300">Client Surname (Optional)</Label>
+                  <Label className="text-xs text-slate-300">
+                    Client Surname <span className="text-rose-400 font-bold">*</span>
+                  </Label>
                   <Input
                     placeholder="e.g. van der Merwe"
                     value={inviteForm.lastName}
                     onChange={(e) => setInviteForm({ ...inviteForm, lastName: e.target.value })}
                     className="bg-slate-900 border-slate-800 text-xs"
+                    required
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-300">Company / Business Name (Optional)</Label>
+                <Label className="text-xs text-slate-300">
+                  Company / Business Name <span className="text-rose-400 font-bold">*</span>
+                </Label>
                 <Input
-                  placeholder="e.g. Outeniqua Farm Bistro"
+                  placeholder="e.g. Outeniqua Farm Bistro Pty Ltd"
                   value={inviteForm.companyName}
                   onChange={(e) => setInviteForm({ ...inviteForm, companyName: e.target.value })}
                   className="bg-slate-900 border-slate-800 text-xs"
+                  required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-300">Client Email Address</Label>
+                  <Label className="text-xs text-slate-300">
+                    Client Email Address <span className="text-rose-400 font-bold">*</span>
+                  </Label>
                   <Input
                     type="email"
                     placeholder="client@company.co.za"
                     value={inviteForm.email}
                     onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
                     className="bg-slate-900 border-slate-800 text-xs"
+                    required
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-300">Contact Number</Label>
+                  <Label className="text-xs text-slate-300">
+                    Contact Number <span className="text-rose-400 font-bold">*</span>
+                  </Label>
                   <Input
                     placeholder="+27 82 000 0000"
                     value={inviteForm.contactNumber}
                     onChange={(e) => setInviteForm({ ...inviteForm, contactNumber: e.target.value })}
                     className="bg-slate-900 border-slate-800 text-xs"
+                    required
                   />
                 </div>
               </div>
@@ -1094,20 +1177,20 @@ export default function ClientOnboardingPage() {
                 )}
               </div>
 
-              {/* E-Signature & Audit Info */}
+              {/* E-Signature & Audit Info - Natural Aspect Ratio & Unsquashed */}
               {selectedSubmission.signature_data_url && (
                 <div className="space-y-2 bg-slate-900/40 p-4 rounded-xl border border-slate-800">
                   <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                     <FileSignature className="w-4 h-4 text-indigo-400" /> South African ECTA 25 E-Signature
                   </h4>
-                  <div className="bg-white rounded-lg p-2 max-w-xs shadow">
+                  <div className="bg-white rounded-lg p-3 max-w-sm mx-auto shadow flex items-center justify-center">
                     <img
                       src={selectedSubmission.signature_data_url}
                       alt="Client Signature"
-                      className="max-h-24 w-auto object-contain mx-auto"
+                      className="max-h-24 max-w-full h-auto w-auto object-contain mx-auto"
                     />
                   </div>
-                  <div className="text-[11px] text-slate-400 font-mono space-y-0.5 pt-1">
+                  <div className="text-[11px] text-slate-400 font-mono space-y-0.5 pt-1 text-center">
                     <div>Signer IP Address: {selectedSubmission.signer_ip || 'Captured at submission'}</div>
                     <div>Timestamp: {selectedSubmission.submitted_at ? formatSaDate(selectedSubmission.submitted_at) : 'N/A'}</div>
                     <div className="text-emerald-400">✓ Legal declaration accepted and cryptographically logged</div>

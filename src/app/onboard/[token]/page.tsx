@@ -66,13 +66,16 @@ export default function PublicClientOnboardingPage() {
   });
 
   const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [step2Errors, setStep2Errors] = useState<Record<string, string>>({});
+
+  // Signature state
   const [signatureMode, setSignatureMode] = useState<'draw' | 'type'>('draw');
   const [typedSignature, setTypedSignature] = useState('');
-  const [hasSignature, setHasSignature] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmittedSuccess, setIsSubmittedSuccess] = useState(false);
 
   const sigCanvasRef = useRef<SignatureCanvas | null>(null);
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Load public onboarding data
   useEffect(() => {
@@ -122,50 +125,97 @@ export default function PublicClientOnboardingPage() {
     loadOnboarding();
   }, [token]);
 
+  // Synchronize drawing canvas resolution with container to prevent squashed signatures
+  useEffect(() => {
+    if (step === 3 && signatureMode === 'draw' && sigCanvasRef.current) {
+      const timer = setTimeout(() => {
+        const canvas = sigCanvasRef.current?.getCanvas();
+        if (canvas && canvas.parentElement) {
+          const rect = canvas.parentElement.getBoundingClientRect();
+          if (rect.width > 50 && rect.height > 50) {
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+          }
+        }
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [step, signatureMode]);
+
+  // When step 3 is opened, auto-populate typedSignature if blank
+  useEffect(() => {
+    if (step === 3 && !typedSignature.trim()) {
+      const fullName = `${formData.firstName} ${formData.lastName}`.trim();
+      if (fullName) {
+        setTypedSignature(fullName);
+      }
+    }
+  }, [step, formData.firstName, formData.lastName, typedSignature]);
+
   // Answer handler for custom questions
   const handleAnswerChange = (questionId: string, value: any) => {
     setAnswers((prev) => ({
       ...prev,
       [questionId]: value,
     }));
+    // Clear inline error if answered
+    if (step2Errors[questionId]) {
+      setStep2Errors((prev) => {
+        const next = { ...prev };
+        delete next[questionId];
+        return next;
+      });
+    }
   };
 
   // Checkbox multi-select answer handler
   const handleCheckboxToggle = (questionId: string, option: string) => {
     setAnswers((prev) => {
       const current = Array.isArray(prev[questionId]) ? prev[questionId] : [];
+      let updated: string[];
       if (current.includes(option)) {
-        return { ...prev, [questionId]: current.filter((o: string) => o !== option) };
+        updated = current.filter((o: string) => o !== option);
       } else {
-        return { ...prev, [questionId]: [...current, option] };
+        updated = [...current, option];
       }
+      return { ...prev, [questionId]: updated };
     });
+
+    if (step2Errors[questionId]) {
+      setStep2Errors((prev) => {
+        const next = { ...prev };
+        delete next[questionId];
+        return next;
+      });
+    }
   };
 
-  // Step 1 Validation
+  // Step 1 Validation: Name, Surname, Contact Number, Email, Company Name are NOT optional
   const validateStep1 = () => {
     if (!formData.firstName.trim() || !formData.lastName.trim()) {
-      alert('Please enter your first name and surname.');
-      return false;
-    }
-    if (!formData.email.trim() || !formData.email.includes('@')) {
-      alert('Please enter a valid email address.');
-      return false;
-    }
-    if (!formData.contactNumber.trim()) {
-      alert('Please enter your primary contact number.');
+      alert('First name and surname are required.');
       return false;
     }
     if (!formData.companyName.trim()) {
-      alert('Please enter your business or company name.');
+      alert('Business / Company name is required.');
+      return false;
+    }
+    if (!formData.contactNumber.trim()) {
+      alert('Primary contact number is required.');
+      return false;
+    }
+    if (!formData.email.trim() || !formData.email.includes('@')) {
+      alert('A valid email address is required.');
       return false;
     }
     return true;
   };
 
-  // Step 2 Validation (required questions)
+  // Step 2 Validation: Check all questions marked as required
   const validateStep2 = () => {
     if (!template) return true;
+    const errors: Record<string, string> = {};
+
     for (const q of template.questions) {
       if (q.required) {
         const val = answers[q.id];
@@ -175,11 +225,18 @@ export default function PublicClientOnboardingPage() {
           val === '' ||
           (Array.isArray(val) && val.length === 0)
         ) {
-          alert(`Please answer the mandatory question: "${q.label}"`);
-          return false;
+          errors[q.id] = `This question is required by ${org?.name || 'the business'}.`;
         }
       }
     }
+
+    if (Object.keys(errors).length > 0) {
+      setStep2Errors(errors);
+      alert('Please provide answers for all required questions before proceeding.');
+      return false;
+    }
+
+    setStep2Errors({});
     return true;
   };
 
@@ -193,29 +250,50 @@ export default function PublicClientOnboardingPage() {
     }
 
     let signatureDataUrl: string | undefined = undefined;
+
     if (template?.require_signature) {
       if (signatureMode === 'draw') {
         if (!sigCanvasRef.current || sigCanvasRef.current.isEmpty()) {
           alert('Please provide your electronic signature in the box below.');
           return;
         }
-        signatureDataUrl = sigCanvasRef.current.toDataURL('image/png');
+        try {
+          signatureDataUrl = sigCanvasRef.current.getTrimmedCanvas().toDataURL('image/png');
+        } catch {
+          signatureDataUrl = sigCanvasRef.current.toDataURL('image/png');
+        }
       } else {
-        if (!typedSignature.trim()) {
-          alert('Please type your legal full name for your electronic signature.');
+        // Type Signature Mode
+        const fullNameFallback = `${formData.firstName} ${formData.lastName}`.trim();
+        const effectiveName = (typedSignature.trim() || fullNameFallback).trim();
+
+        if (!effectiveName) {
+          alert('Please enter your full legal name to generate your electronic signature.');
           return;
         }
-        // Generate SVG or canvas with typed signature
+
+        // Generate crisp 800x220 transparent cursive signature PNG
         const canvas = document.createElement('canvas');
-        canvas.width = 400;
-        canvas.height = 100;
+        canvas.width = 800;
+        canvas.height = 220;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, 400, 100);
+          ctx.clearRect(0, 0, 800, 220);
           ctx.fillStyle = '#0f172a';
-          ctx.font = 'italic 28px Georgia, serif';
-          ctx.fillText(typedSignature.trim(), 20, 58);
+          ctx.font = 'italic 54px Georgia, "Dancing Script", "Caveat", cursive, serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(effectiveName, 400, 100);
+
+          // Subtle elegant underline
+          ctx.beginPath();
+          const textWidth = Math.min(ctx.measureText(effectiveName).width, 700);
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 2.5;
+          ctx.moveTo(400 - textWidth / 2 - 15, 140);
+          ctx.lineTo(400 + textWidth / 2 + 15, 140);
+          ctx.stroke();
+
           signatureDataUrl = canvas.toDataURL('image/png');
         }
       }
@@ -239,7 +317,7 @@ export default function PublicClientOnboardingPage() {
       }
 
       setIsSubmittedSuccess(true);
-      // Trigger festive celebration
+      // Trigger confetti celebration
       try {
         confetti({
           particleCount: 80,
@@ -283,14 +361,6 @@ export default function PublicClientOnboardingPage() {
           <p className="text-xs text-slate-400 leading-relaxed">
             {error || 'This onboarding link could not be found or has expired.'}
           </p>
-          <div className="pt-2">
-            <a
-              href="mailto:support@lunarposgeorge.co.za"
-              className="text-xs text-indigo-400 hover:underline"
-            >
-              Contact Support
-            </a>
-          </div>
         </Card>
       </div>
     );
@@ -424,21 +494,21 @@ export default function PublicClientOnboardingPage() {
                 </div>
               </div>
 
-              {/* Populated E-Signature Card */}
+              {/* Populated E-Signature Card (Unsquashed with natural aspect ratio) */}
               {submission.signature_data_url && (
                 <div className="space-y-3 pt-2">
                   <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                     <FileSignature className="w-4 h-4 text-indigo-400" /> Electronic Signature & Audit Trail
                   </h4>
                   <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="bg-white p-2 rounded-lg max-w-xs shadow">
+                    <div className="bg-white p-3 rounded-lg max-w-sm shadow mx-auto sm:mx-0 flex items-center justify-center">
                       <img
                         src={submission.signature_data_url}
                         alt="Signature"
-                        className="max-h-20 w-auto object-contain"
+                        className="max-h-24 max-w-full h-auto w-auto object-contain mx-auto"
                       />
                     </div>
-                    <div className="text-[11px] text-slate-400 font-mono space-y-1 text-right">
+                    <div className="text-[11px] text-slate-400 font-mono space-y-1 text-center sm:text-right">
                       <div>Signer: {submission.full_name}</div>
                       <div>Date: {submission.submitted_at ? formatSaDate(submission.submitted_at) : 'N/A'}</div>
                       <div>IP: {submission.signer_ip || 'Captured at submission'}</div>
@@ -536,7 +606,7 @@ export default function PublicClientOnboardingPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-300">
-                    First Name <span className="text-red-400">*</span>
+                    First Name <span className="text-rose-400 font-bold">*</span>
                   </Label>
                   <Input
                     placeholder="e.g. Johan"
@@ -548,7 +618,7 @@ export default function PublicClientOnboardingPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-300">
-                    Surname <span className="text-red-400">*</span>
+                    Surname <span className="text-rose-400 font-bold">*</span>
                   </Label>
                   <Input
                     placeholder="e.g. van der Merwe"
@@ -563,7 +633,7 @@ export default function PublicClientOnboardingPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-300">
-                    Registered Company Name <span className="text-red-400">*</span>
+                    Registered Company Name <span className="text-rose-400 font-bold">*</span>
                   </Label>
                   <Input
                     placeholder="e.g. Outeniqua Farm Bistro Pty Ltd"
@@ -589,7 +659,7 @@ export default function PublicClientOnboardingPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-300">
-                    Email Address <span className="text-red-400">*</span>
+                    Email Address <span className="text-rose-400 font-bold">*</span>
                   </Label>
                   <Input
                     type="email"
@@ -602,7 +672,7 @@ export default function PublicClientOnboardingPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-300">
-                    Primary Contact Number <span className="text-red-400">*</span>
+                    Primary Contact Number <span className="text-rose-400 font-bold">*</span>
                   </Label>
                   <Input
                     placeholder="+27 44 874 0000"
@@ -650,7 +720,7 @@ export default function PublicClientOnboardingPage() {
           </Card>
         )}
 
-        {/* STEP 2: CUSTOM BUSINESS QUESTIONNAIRE */}
+        {/* STEP 2: CUSTOM BUSINESS QUESTIONNAIRE (Strict Required vs Optional Support) */}
         {step === 2 && (
           <Card className="bg-slate-900/60 border-slate-800 shadow-xl">
             <CardContent className="p-6 space-y-5">
@@ -664,119 +734,154 @@ export default function PublicClientOnboardingPage() {
                   No additional questions required. Click below to proceed to signature.
                 </div>
               ) : (
-                template.questions.map((q) => (
-                  <div key={q.id} className="space-y-1.5 pt-1">
-                    <Label className="text-xs font-medium text-slate-200 block">
-                      {q.label} {q.required && <span className="text-red-400">*</span>}
-                    </Label>
-                    {q.helpText && (
-                      <span className="text-[11px] text-slate-400 block mb-1">{q.helpText}</span>
-                    )}
+                template.questions.map((q) => {
+                  const hasError = Boolean(step2Errors[q.id]);
 
-                    {/* Short Text */}
-                    {q.type === 'text' && (
-                      <Input
-                        placeholder={q.placeholder || ''}
-                        value={answers[q.id] || ''}
-                        onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                        className="bg-slate-950 border-slate-800 text-xs"
-                        required={q.required}
-                      />
-                    )}
-
-                    {/* Numeric */}
-                    {q.type === 'number' && (
-                      <Input
-                        type="number"
-                        placeholder={q.placeholder || ''}
-                        value={answers[q.id] || ''}
-                        onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                        className="bg-slate-950 border-slate-800 text-xs"
-                        required={q.required}
-                      />
-                    )}
-
-                    {/* Date */}
-                    {q.type === 'date' && (
-                      <Input
-                        type="date"
-                        value={answers[q.id] || ''}
-                        onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                        className="bg-slate-950 border-slate-800 text-xs text-slate-200"
-                        required={q.required}
-                      />
-                    )}
-
-                    {/* Long Text / Textarea */}
-                    {q.type === 'textarea' && (
-                      <textarea
-                        rows={3}
-                        placeholder={q.placeholder || ''}
-                        value={answers[q.id] || ''}
-                        onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-indigo-500 font-sans"
-                        required={q.required}
-                      />
-                    )}
-
-                    {/* Dropdown Select */}
-                    {q.type === 'select' && (
-                      <select
-                        value={answers[q.id] || ''}
-                        onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-indigo-500"
-                        required={q.required}
-                      >
-                        <option value="">{q.placeholder || 'Select an option...'}</option>
-                        {(q.options || []).map((opt) => (
-                          <option key={opt} value={opt}>
-                            {opt}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-
-                    {/* Radio Options */}
-                    {q.type === 'radio' && (
-                      <div className="space-y-1.5 pt-1">
-                        {(q.options || []).map((opt) => (
-                          <label key={opt} className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
-                            <input
-                              type="radio"
-                              name={q.id}
-                              value={opt}
-                              checked={answers[q.id] === opt}
-                              onChange={() => handleAnswerChange(q.id, opt)}
-                              className="text-indigo-600 bg-slate-950 border-slate-700"
-                              required={q.required}
-                            />
-                            <span>{opt}</span>
-                          </label>
-                        ))}
+                  return (
+                    <div
+                      key={q.id}
+                      className={`space-y-1.5 p-3 rounded-xl transition-all ${
+                        hasError
+                          ? 'bg-rose-950/20 border border-rose-500/50'
+                          : 'bg-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <Label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                          <span>{q.label}</span>
+                          {q.required && <span className="text-rose-400 font-bold">*</span>}
+                        </Label>
+                        {q.required ? (
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-rose-300 bg-rose-950/70 border border-rose-500/40 px-2 py-0.5 rounded">
+                            Required *
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono text-slate-500">
+                            (Optional)
+                          </span>
+                        )}
                       </div>
-                    )}
 
-                    {/* Checkbox Options */}
-                    {q.type === 'checkbox' && (
-                      <div className="space-y-1.5 pt-1">
-                        {(q.options || []).map((opt) => {
-                          const isChecked = Array.isArray(answers[q.id]) && answers[q.id].includes(opt);
-                          return (
+                      {q.helpText && (
+                        <span className="text-[11px] text-slate-400 block mb-1">{q.helpText}</span>
+                      )}
+
+                      {/* Short Text */}
+                      {q.type === 'text' && (
+                        <Input
+                          placeholder={q.placeholder || ''}
+                          value={answers[q.id] || ''}
+                          onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                          className={`bg-slate-950 border-slate-800 text-xs ${
+                            hasError ? 'border-rose-500' : ''
+                          }`}
+                        />
+                      )}
+
+                      {/* Numeric */}
+                      {q.type === 'number' && (
+                        <Input
+                          type="number"
+                          placeholder={q.placeholder || ''}
+                          value={answers[q.id] || ''}
+                          onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                          className={`bg-slate-950 border-slate-800 text-xs ${
+                            hasError ? 'border-rose-500' : ''
+                          }`}
+                        />
+                      )}
+
+                      {/* Date */}
+                      {q.type === 'date' && (
+                        <Input
+                          type="date"
+                          value={answers[q.id] || ''}
+                          onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                          className={`bg-slate-950 border-slate-800 text-xs text-slate-200 ${
+                            hasError ? 'border-rose-500' : ''
+                          }`}
+                        />
+                      )}
+
+                      {/* Long Text / Textarea */}
+                      {q.type === 'textarea' && (
+                        <textarea
+                          rows={3}
+                          placeholder={q.placeholder || ''}
+                          value={answers[q.id] || ''}
+                          onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                          className={`w-full bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-indigo-500 font-sans ${
+                            hasError ? 'border-rose-500' : ''
+                          }`}
+                        />
+                      )}
+
+                      {/* Dropdown Select */}
+                      {q.type === 'select' && (
+                        <select
+                          value={answers[q.id] || ''}
+                          onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                          className={`w-full bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-indigo-500 ${
+                            hasError ? 'border-rose-500' : ''
+                          }`}
+                        >
+                          <option value="">{q.placeholder || 'Select an option...'}</option>
+                          {(q.options || []).map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      {/* Radio Options */}
+                      {q.type === 'radio' && (
+                        <div className="space-y-1.5 pt-1">
+                          {(q.options || []).map((opt) => (
                             <label key={opt} className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
                               <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => handleCheckboxToggle(q.id, opt)}
-                                className="rounded text-indigo-600 bg-slate-950 border-slate-700"
+                                type="radio"
+                                name={q.id}
+                                value={opt}
+                                checked={answers[q.id] === opt}
+                                onChange={() => handleAnswerChange(q.id, opt)}
+                                className="text-indigo-600 bg-slate-950 border-slate-700"
                               />
                               <span>{opt}</span>
                             </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ))
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Checkbox Options */}
+                      {q.type === 'checkbox' && (
+                        <div className="space-y-1.5 pt-1">
+                          {(q.options || []).map((opt) => {
+                            const isChecked = Array.isArray(answers[q.id]) && answers[q.id].includes(opt);
+                            return (
+                              <label key={opt} className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => handleCheckboxToggle(q.id, opt)}
+                                  className="rounded text-indigo-600 bg-slate-950 border-slate-700"
+                                />
+                                <span>{opt}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Inline Error Message */}
+                      {hasError && (
+                        <span className="text-[11px] text-rose-400 font-medium flex items-center gap-1 mt-1">
+                          <AlertCircle className="w-3.5 h-3.5" /> {step2Errors[q.id]}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })
               )}
 
               <div className="pt-4 flex items-center justify-between border-t border-slate-800">
@@ -802,7 +907,7 @@ export default function PublicClientOnboardingPage() {
           </Card>
         )}
 
-        {/* STEP 3: DECLARATION & E-SIGNATURE */}
+        {/* STEP 3: DECLARATION & E-SIGNATURE (Draw or Type - Never Squashed!) */}
         {step === 3 && (
           <form onSubmit={handleSubmit}>
             <Card className="bg-slate-900/60 border-slate-800 shadow-xl">
@@ -841,70 +946,83 @@ export default function PublicClientOnboardingPage() {
                   <div className="space-y-3 pt-2">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs font-semibold text-slate-200">
-                        Electronic Signature <span className="text-red-400">*</span>
+                        Electronic Signature <span className="text-rose-400">*</span>
                       </Label>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => setSignatureMode('draw')}
-                          className={`text-xs px-2.5 py-1 rounded-lg transition-all ${
+                          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${
                             signatureMode === 'draw'
-                              ? 'bg-indigo-600 text-white font-semibold'
-                              : 'text-slate-400 hover:text-slate-200'
+                              ? 'bg-indigo-600 text-white shadow'
+                              : 'text-slate-400 hover:text-slate-200 bg-slate-900'
                           }`}
                         >
-                          Draw
+                          Draw Signature
                         </button>
                         <button
                           type="button"
                           onClick={() => setSignatureMode('type')}
-                          className={`text-xs px-2.5 py-1 rounded-lg transition-all ${
+                          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${
                             signatureMode === 'type'
-                              ? 'bg-indigo-600 text-white font-semibold'
-                              : 'text-slate-400 hover:text-slate-200'
+                              ? 'bg-indigo-600 text-white shadow'
+                              : 'text-slate-400 hover:text-slate-200 bg-slate-900'
                           }`}
                         >
-                          Type
+                          Type Signature
                         </button>
                       </div>
                     </div>
 
                     {signatureMode === 'draw' ? (
                       <div className="space-y-2">
-                        <div className="rounded-xl border border-slate-700 bg-white overflow-hidden shadow-inner">
+                        <div
+                          ref={canvasContainerRef}
+                          className="rounded-xl border border-slate-700 bg-white overflow-hidden shadow-inner h-48 flex items-center justify-center touch-none"
+                        >
                           <SignatureCanvas
                             ref={sigCanvasRef}
                             canvasProps={{
-                              className: 'w-full h-36 bg-white cursor-crosshair',
+                              className: 'w-full h-full cursor-crosshair touch-none object-contain',
+                              style: { width: '100%', height: '100%', touchAction: 'none' },
                             }}
                             penColor="#0f172a"
-                            onEnd={() => setHasSignature(true)}
                           />
                         </div>
                         <div className="flex items-center justify-between text-[11px] text-slate-400">
-                          <span>Sign inside the box using your finger, stylus, or mouse.</span>
+                          <span>Sign inside the box using your finger, stylus, trackpad, or mouse.</span>
                           <button
                             type="button"
-                            onClick={() => {
-                              sigCanvasRef.current?.clear();
-                              setHasSignature(false);
-                            }}
-                            className="text-slate-400 hover:text-white flex items-center gap-1"
+                            onClick={() => sigCanvasRef.current?.clear()}
+                            className="text-slate-400 hover:text-white flex items-center gap-1 font-semibold"
                           >
-                            <RotateCcw className="w-3 h-3" /> Clear
+                            <RotateCcw className="w-3.5 h-3.5" /> Clear Signature
                           </button>
                         </div>
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        <Input
-                          placeholder="Type your legal full name here..."
-                          value={typedSignature || `${formData.firstName} ${formData.lastName}`.trim()}
-                          onChange={(e) => setTypedSignature(e.target.value)}
-                          className="bg-slate-950 border-slate-800 text-sm font-serif italic text-cyan-300 h-12"
-                        />
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-300">Type Your Full Legal Name</Label>
+                          <Input
+                            placeholder="Type full legal name..."
+                            value={typedSignature}
+                            onChange={(e) => setTypedSignature(e.target.value)}
+                            className="bg-slate-950 border-slate-800 text-sm font-medium text-white h-11"
+                          />
+                        </div>
+
+                        {/* Live Cursive Signature Preview (Never squashed!) */}
+                        <div className="p-4 bg-white rounded-xl shadow-inner border border-slate-300 text-center flex flex-col items-center justify-center min-h-24">
+                          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">
+                            Live Electronic Signature Preview
+                          </span>
+                          <span className="font-serif italic text-3xl text-slate-900 border-b-2 border-slate-900 pb-1 px-4">
+                            {typedSignature.trim() || `${formData.firstName} ${formData.lastName}`.trim() || 'Your Signature Preview'}
+                          </span>
+                        </div>
                         <span className="text-[11px] text-slate-400 block">
-                          Typing your name produces a legally recognized electronic signature.
+                          Typing your name generates a legally recognized electronic signature under SA ECTA 25 of 2002.
                         </span>
                       </div>
                     )}

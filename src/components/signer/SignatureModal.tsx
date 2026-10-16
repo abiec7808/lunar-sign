@@ -55,6 +55,23 @@ export function SignatureModal({
   // Upload State
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
 
+  // Synchronize drawing canvas resolution with container to prevent squashed signatures
+  React.useEffect(() => {
+    if (isOpen && activeTab === 'draw' && sigCanvasRef.current) {
+      const timer = setTimeout(() => {
+        const canvas = sigCanvasRef.current?.getCanvas();
+        if (canvas && canvas.parentElement) {
+          const rect = canvas.parentElement.getBoundingClientRect();
+          if (rect.width > 50 && rect.height > 50) {
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+          }
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, activeTab]);
+
   const handleClearCanvas = () => {
     sigCanvasRef.current?.clear();
   };

@@ -25,7 +25,6 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/documents', label: 'Documents', icon: FileText },
   { href: '/templates', label: 'Templates', icon: Copy },
-  { href: '/client-onboarding', label: 'Client Onboarding', icon: UserPlus },
   { href: '/contacts', label: 'Address Book', icon: Users },
   { href: '/team', label: 'Team & Roles', icon: UserCheck },
   { href: '/settings', label: 'Settings & Branding', icon: Settings },
@@ -56,8 +55,8 @@ export function AdminSidebar() {
             setLunarCalcEnabled(true);
             setClientOnboardingEnabled(true);
           } else {
-            if (data.user.lunarCalcEnabled) setLunarCalcEnabled(true);
-            if (data.user.clientOnboardingEnabled) setClientOnboardingEnabled(true);
+            setLunarCalcEnabled(Boolean(data.user.lunarCalcEnabled));
+            setClientOnboardingEnabled(Boolean(data.user.clientOnboardingEnabled));
           }
         }
       } catch (err) {
@@ -73,6 +72,13 @@ export function AdminSidebar() {
   }, [pathname]);
 
   const items = [...NAV_ITEMS];
+  if (isSuperAdmin || clientOnboardingEnabled) {
+    items.push({
+      href: '/client-onboarding',
+      label: isSuperAdmin ? 'Client Onboarding (Admin)' : 'Client Onboarding',
+      icon: UserPlus,
+    });
+  }
   if (isSuperAdmin || lunarCalcEnabled) {
     items.push({
       href: '/lunar-calc',
