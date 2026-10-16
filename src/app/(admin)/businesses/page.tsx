@@ -21,6 +21,8 @@ import {
   Mail,
   Phone,
   Calculator,
+  UserPlus,
+  Sparkles,
 } from 'lucide-react';
 import { formatSaDate } from '@/lib/dates';
 
@@ -45,12 +47,74 @@ interface Business {
   client_onboarding_requested_at?: string;
 }
 
+interface ActionLoadingState {
+  id: string;
+  module: 'status' | 'lunar_calc' | 'client_onboarding';
+}
+
+function ModuleToggleSwitch({
+  enabled,
+  loading,
+  onToggle,
+  title,
+  activeColor = 'bg-emerald-600',
+  activeText = 'text-emerald-300',
+  icon: Icon,
+  labelActive = 'Enabled',
+  labelDisabled = 'Disabled',
+}: {
+  enabled: boolean;
+  loading: boolean;
+  onToggle: () => void;
+  title: string;
+  activeColor?: string;
+  activeText?: string;
+  icon?: any;
+  labelActive?: string;
+  labelDisabled?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        disabled={loading}
+        onClick={onToggle}
+        title={title}
+        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+          enabled ? activeColor : 'bg-slate-800'
+        } ${loading ? 'opacity-60 cursor-wait' : 'hover:opacity-90'}`}
+      >
+        <span
+          className={`pointer-events-none inline-flex h-5 w-5 transform items-center justify-center rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+            enabled ? 'translate-x-5' : 'translate-x-0'
+          }`}
+        >
+          {loading ? (
+            <div className="w-2.5 h-2.5 border-2 border-slate-700 border-t-transparent rounded-full animate-spin" />
+          ) : Icon ? (
+            <Icon className={`w-3 h-3 ${enabled ? 'text-slate-900' : 'text-slate-500'}`} />
+          ) : null}
+        </span>
+      </button>
+      <span
+        className={`text-xs font-semibold select-none ${
+          enabled ? activeText : 'text-slate-500'
+        }`}
+      >
+        {enabled ? labelActive : labelDisabled}
+      </span>
+    </div>
+  );
+}
+
 export default function SuperAdminBusinessesPage() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<ActionLoadingState | null>(null);
 
   const fetchBusinesses = async () => {
     setIsLoading(true);
@@ -77,7 +141,7 @@ export default function SuperAdminBusinessesPage() {
     maxUsers?: number,
     maxDocuments?: number
   ) => {
-    setActionLoadingId(id);
+    setActionLoading({ id, module: 'status' });
     try {
       const res = await fetch(`/api/super-admin/businesses/${id}/status`, {
         method: 'POST',
@@ -90,43 +154,75 @@ export default function SuperAdminBusinessesPage() {
     } catch (err) {
       console.error('Failed to update business status:', err);
     } finally {
-      setActionLoadingId(null);
+      setActionLoading(null);
     }
   };
 
   const handleToggleLunarCalc = async (id: string, current: boolean) => {
-    setActionLoadingId(id);
+    const nextVal = !current;
+    // Optimistic UI update
+    setBusinesses((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, lunar_calc_enabled: nextVal } : b))
+    );
+    setActionLoading({ id, module: 'lunar_calc' });
     try {
       const res = await fetch(`/api/super-admin/businesses/${id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lunarCalcEnabled: !current }),
+        body: JSON.stringify({ lunarCalcEnabled: nextVal }),
       });
-      if (res.ok) {
-        await fetchBusinesses();
+      if (!res.ok) {
+        // Rollback on server failure
+        setBusinesses((prev) =>
+          prev.map((b) => (b.id === id ? { ...b, lunar_calc_enabled: current } : b))
+        );
       }
     } catch (err) {
       console.error('Failed to toggle Lunar Calc for business:', err);
+      // Rollback on network failure
+      setBusinesses((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, lunar_calc_enabled: current } : b))
+      );
     } finally {
-      setActionLoadingId(null);
+      setActionLoading(null);
     }
   };
 
   const handleToggleClientOnboarding = async (id: string, current: boolean) => {
-    setActionLoadingId(id);
+    const nextVal = !current;
+    // Optimistic UI update
+    setBusinesses((prev) =>
+      prev.map((b) =>
+        b.id === id
+          ? {
+              ...b,
+              client_onboarding_enabled: nextVal,
+              client_onboarding_requested: nextVal ? false : b.client_onboarding_requested,
+            }
+          : b
+      )
+    );
+    setActionLoading({ id, module: 'client_onboarding' });
     try {
       const res = await fetch(`/api/super-admin/businesses/${id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientOnboardingEnabled: !current }),
+        body: JSON.stringify({ clientOnboardingEnabled: nextVal }),
       });
-      if (res.ok) {
-        await fetchBusinesses();
+      if (!res.ok) {
+        // Rollback on server failure
+        setBusinesses((prev) =>
+          prev.map((b) => (b.id === id ? { ...b, client_onboarding_enabled: current } : b))
+        );
       }
     } catch (err) {
       console.error('Failed to toggle Client Onboarding for business:', err);
+      // Rollback on network failure
+      setBusinesses((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, client_onboarding_enabled: current } : b))
+      );
     } finally {
-      setActionLoadingId(null);
+      setActionLoading(null);
     }
   };
 
@@ -136,18 +232,36 @@ export default function SuperAdminBusinessesPage() {
       (b.admin_name && b.admin_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (b.admin_email && b.admin_email.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (b.vat_number && b.vat_number.includes(searchTerm));
-    const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
-    return matchesSearch && matchesStatus;
+
+    if (!matchesSearch) return false;
+
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'requested_onboarding') {
+      return Boolean(b.client_onboarding_requested && !b.client_onboarding_enabled);
+    }
+    if (statusFilter === 'lunar_calc_enabled') {
+      return Boolean(b.lunar_calc_enabled);
+    }
+    if (statusFilter === 'onboarding_enabled') {
+      return Boolean(b.client_onboarding_enabled);
+    }
+
+    return b.status === statusFilter;
   });
 
   const pendingCount = businesses.filter((b) => b.status === 'pending_approval').length;
   const approvedCount = businesses.filter((b) => b.status === 'approved').length;
+  const calcActiveCount = businesses.filter((b) => b.lunar_calc_enabled).length;
+  const onboardingActiveCount = businesses.filter((b) => b.client_onboarding_enabled).length;
+  const requestedOnboardingCount = businesses.filter(
+    (b) => b.client_onboarding_requested && !b.client_onboarding_enabled
+  ).length;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#090d16]">
       <AdminHeader
         title="Super Admin • Registered Businesses"
-        subtitle="Approve new enterprise signups, manage multi-tenant permissions, and adjust document/user limits."
+        subtitle="Manage multi-tenant permissions, toggle Lunar Calc and Client Onboarding per business, and approve signups."
         actionButton={
           <Button
             onClick={fetchBusinesses}
@@ -160,14 +274,17 @@ export default function SuperAdminBusinessesPage() {
         }
       />
 
-      <div className="p-8 space-y-6 max-w-7xl w-full mx-auto">
+      <div className="p-4 sm:p-6 md:p-8 space-y-6 max-w-7xl w-full mx-auto">
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="bg-slate-900/70 border-slate-800">
             <CardContent className="p-5 flex items-center justify-between">
               <div>
                 <span className="text-xs font-semibold text-slate-400">Total Registered</span>
                 <h3 className="text-2xl font-bold text-white mt-1">{businesses.length}</h3>
+                <span className="text-[11px] text-emerald-400 font-medium">
+                  {approvedCount} active businesses
+                </span>
               </div>
               <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold">
                 <Building2 className="w-5 h-5" />
@@ -179,9 +296,10 @@ export default function SuperAdminBusinessesPage() {
             <CardContent className="p-5 flex items-center justify-between">
               <div>
                 <span className="text-xs font-semibold text-amber-400 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5" /> Pending Approval
+                  <Clock className="w-3.5 h-3.5" /> Pending Signups
                 </span>
                 <h3 className="text-2xl font-bold text-white mt-1">{pendingCount}</h3>
+                <span className="text-[11px] text-slate-400">Awaiting Super Admin</span>
               </div>
               <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
                 <Clock className="w-5 h-5" />
@@ -193,12 +311,32 @@ export default function SuperAdminBusinessesPage() {
             <CardContent className="p-5 flex items-center justify-between">
               <div>
                 <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1">
-                  <CheckCircle className="w-3.5 h-3.5" /> Approved & Active
+                  <Calculator className="w-3.5 h-3.5" /> Lunar Calc Module
                 </span>
-                <h3 className="text-2xl font-bold text-white mt-1">{approvedCount}</h3>
+                <h3 className="text-2xl font-bold text-white mt-1">{calcActiveCount}</h3>
+                <span className="text-[11px] text-slate-400">Businesses with access</span>
               </div>
               <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
-                <CheckCircle className="w-5 h-5" />
+                <Calculator className="w-5 h-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-900/70 border-slate-800">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-cyan-400 flex items-center gap-1">
+                  <UserPlus className="w-3.5 h-3.5" /> Client Onboarding
+                </span>
+                <h3 className="text-2xl font-bold text-white mt-1">{onboardingActiveCount}</h3>
+                <span className="text-[11px] text-amber-400 font-medium">
+                  {requestedOnboardingCount > 0
+                    ? `⚡ ${requestedOnboardingCount} requested activation`
+                    : 'All requests addressed'}
+                </span>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
+                <UserPlus className="w-5 h-5" />
               </div>
             </CardContent>
           </Card>
@@ -216,20 +354,52 @@ export default function SuperAdminBusinessesPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
-            {['all', 'pending_approval', 'approved', 'suspended'].map((status) => (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all shrink-0 ${
-                  statusFilter === status
-                    ? 'bg-indigo-600 text-white shadow'
-                    : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                {status.replace('_', ' ')}
-              </button>
-            ))}
+          <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+                statusFilter === 'all'
+                  ? 'bg-indigo-600 text-white shadow'
+                  : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              All ({businesses.length})
+            </button>
+            <button
+              onClick={() => setStatusFilter('pending_approval')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+                statusFilter === 'pending_approval'
+                  ? 'bg-indigo-600 text-white shadow'
+                  : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              Pending Approval ({pendingCount})
+            </button>
+            <button
+              onClick={() => setStatusFilter('approved')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+                statusFilter === 'approved'
+                  ? 'bg-indigo-600 text-white shadow'
+                  : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              Approved ({approvedCount})
+            </button>
+            <button
+              onClick={() => setStatusFilter('requested_onboarding')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center gap-1.5 ${
+                statusFilter === 'requested_onboarding'
+                  ? 'bg-amber-600 text-white shadow'
+                  : 'bg-slate-900 border border-amber-900/50 text-amber-400 hover:text-amber-200'
+              }`}
+            >
+              <span>⚡ Requested Onboarding</span>
+              {requestedOnboardingCount > 0 && (
+                <span className="bg-amber-500 text-slate-950 font-bold px-1.5 py-0.2 rounded-full text-[10px]">
+                  {requestedOnboardingCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
 
@@ -245,7 +415,7 @@ export default function SuperAdminBusinessesPage() {
                     <th className="py-3 px-4">Usage Limits</th>
                     <th className="py-3 px-4">Lunar Calc</th>
                     <th className="py-3 px-4">Client Onboarding</th>
-                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Account Status</th>
                     <th className="py-3 px-4">Registered</th>
                     <th className="py-3 px-4 text-right">Approval Actions</th>
                   </tr>
@@ -253,154 +423,195 @@ export default function SuperAdminBusinessesPage() {
                 <tbody className="divide-y divide-slate-800/60">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-xs text-slate-500">
+                      <td colSpan={8} className="py-8 text-center text-xs text-slate-500">
                         {isLoading ? 'Loading businesses from database...' : 'No businesses match the criteria.'}
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((b) => (
-                      <tr key={b.id} className="hover:bg-slate-800/30 transition-colors">
-                        <td className="py-4 px-4">
-                          <div className="flex items-start gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-indigo-950 border border-indigo-800/50 flex items-center justify-center text-indigo-300 font-bold shrink-0 mt-0.5">
-                              <Building2 className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <div className="font-semibold text-slate-100 text-sm">{b.name}</div>
-                              <div className="text-[11px] text-slate-400 font-mono flex items-center gap-2 mt-0.5">
-                                {b.vat_number && <span>VAT: {b.vat_number}</span>}
-                                {b.company_reg_number && <span>Reg: {b.company_reg_number}</span>}
+                    filtered.map((b) => {
+                      const isCalcLoading =
+                        actionLoading?.id === b.id && actionLoading?.module === 'lunar_calc';
+                      const isOnboardingLoading =
+                        actionLoading?.id === b.id && actionLoading?.module === 'client_onboarding';
+                      const isStatusLoading =
+                        actionLoading?.id === b.id && actionLoading?.module === 'status';
+
+                      return (
+                        <tr key={b.id} className="hover:bg-slate-800/30 transition-colors">
+                          {/* 1. Business & Legal Name */}
+                          <td className="py-4 px-4">
+                            <div className="flex items-start gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-indigo-950 border border-indigo-800/50 flex items-center justify-center text-indigo-300 font-bold shrink-0 mt-0.5">
+                                <Building2 className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className="font-semibold text-slate-100 text-sm">{b.name}</div>
+                                <div className="text-[11px] text-slate-400 font-mono flex items-center gap-2 mt-0.5">
+                                  {b.vat_number && <span>VAT: {b.vat_number}</span>}
+                                  {b.company_reg_number && <span>Reg: {b.company_reg_number}</span>}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="py-4 px-4">
-                          <div className="text-xs text-slate-200 font-medium">{b.admin_name || 'Administrator'}</div>
-                          <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5 font-mono">
-                            <Mail className="w-3 h-3 text-slate-500" /> {b.admin_email}
-                          </div>
-                          {b.phone && (
-                            <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                              <Phone className="w-2.5 h-2.5" /> {b.phone}
+                          {/* 2. Admin Contact */}
+                          <td className="py-4 px-4">
+                            <div className="text-xs text-slate-200 font-medium">
+                              {b.admin_name || 'Administrator'}
                             </div>
-                          )}
-                        </td>
-
-                        <td className="py-4 px-4 text-xs font-mono">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1.5 text-slate-300">
-                              <Users className="w-3.5 h-3.5 text-indigo-400" />
-                              <span>
-                                {b.total_users || 1} / {b.max_users || 5} Users
-                              </span>
+                            <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5 font-mono">
+                              <Mail className="w-3 h-3 text-slate-500" /> {b.admin_email}
                             </div>
-                            <div className="flex items-center gap-1.5 text-slate-300">
-                              <FileText className="w-3.5 h-3.5 text-cyan-400" />
-                              <span>
-                                {b.total_documents || 0} / {b.max_documents || 10} Envelopes
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="py-4 px-4">
-                          <button
-                            disabled={actionLoadingId === b.id}
-                            onClick={() => handleToggleLunarCalc(b.id, Boolean(b.lunar_calc_enabled))}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                              b.lunar_calc_enabled
-                                ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
-                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                            }`}
-                            title={b.lunar_calc_enabled ? 'Click to disable Lunar Calc' : 'Click to enable Lunar Calc'}
-                          >
-                            <Calculator className="w-3.5 h-3.5" />
-                            <span>{b.lunar_calc_enabled ? 'Enabled' : 'Disabled'}</span>
-                          </button>
-                        </td>
-
-                        <td className="py-4 px-4">
-                          <div className="flex flex-col gap-1 items-start">
-                            <button
-                              disabled={actionLoadingId === b.id}
-                              onClick={() => handleToggleClientOnboarding(b.id, Boolean(b.client_onboarding_enabled))}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                                b.client_onboarding_enabled
-                                  ? 'bg-cyan-950/60 border-cyan-500/50 text-cyan-300 hover:bg-cyan-900/60'
-                                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                              }`}
-                              title={b.client_onboarding_enabled ? 'Click to disable Client Onboarding' : 'Click to enable Client Onboarding'}
-                            >
-                              <Users className="w-3.5 h-3.5" />
-                              <span>{b.client_onboarding_enabled ? 'Active' : 'Disabled'}</span>
-                            </button>
-                            {b.client_onboarding_requested && !b.client_onboarding_enabled && (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 font-semibold bg-amber-950/60 border border-amber-500/30 px-1.5 py-0.5 rounded animate-pulse">
-                                ⚡ Requested
-                              </span>
+                            {b.phone && (
+                              <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                <Phone className="w-2.5 h-2.5" /> {b.phone}
+                              </div>
                             )}
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="py-4 px-4">
-                          {b.status === 'approved' && (
-                            <Badge variant="success" className="gap-1">
-                              <CheckCircle className="w-3 h-3" /> Approved
-                            </Badge>
-                          )}
-                          {b.status === 'pending_approval' && (
-                            <Badge variant="warning" className="gap-1">
-                              <Clock className="w-3 h-3" /> Pending Review
-                            </Badge>
-                          )}
-                          {b.status === 'suspended' && (
-                            <Badge variant="destructive" className="gap-1">
-                              <XCircle className="w-3 h-3" /> Suspended
-                            </Badge>
-                          )}
-                        </td>
+                          {/* 3. Usage Limits */}
+                          <td className="py-4 px-4 text-xs font-mono">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 text-slate-300">
+                                <Users className="w-3.5 h-3.5 text-indigo-400" />
+                                <span>
+                                  {b.total_users || 1} / {b.max_users || 5} Users
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-slate-300">
+                                <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                                <span>
+                                  {b.total_documents || 0} / {b.max_documents || 10} Envelopes
+                                </span>
+                              </div>
+                            </div>
+                          </td>
 
-                        <td className="py-4 px-4 text-xs font-mono text-slate-400">
-                          {formatSaDate(b.created_at)}
-                        </td>
+                          {/* 4. Lunar Calc Module Toggle */}
+                          <td className="py-4 px-4">
+                            <ModuleToggleSwitch
+                              enabled={Boolean(b.lunar_calc_enabled)}
+                              loading={isCalcLoading}
+                              onToggle={() =>
+                                handleToggleLunarCalc(b.id, Boolean(b.lunar_calc_enabled))
+                              }
+                              title={
+                                b.lunar_calc_enabled
+                                  ? 'Click to disable Lunar Calc for this business'
+                                  : 'Click to enable Lunar Calc for this business'
+                              }
+                              activeColor="bg-emerald-600"
+                              activeText="text-emerald-300"
+                              icon={Calculator}
+                              labelActive="Enabled"
+                              labelDisabled="Disabled"
+                            />
+                          </td>
 
-                        <td className="py-4 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {b.status === 'pending_approval' ? (
-                              <Button
-                                size="sm"
-                                disabled={actionLoadingId === b.id}
-                                onClick={() => handleUpdateStatus(b.id, 'approved')}
-                                className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs h-8 shadow-sm"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve Business
-                              </Button>
-                            ) : b.status === 'approved' ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={actionLoadingId === b.id}
-                                onClick={() => handleUpdateStatus(b.id, 'suspended')}
-                                className="text-xs h-8 text-amber-400 border-amber-500/40 hover:bg-amber-950/40"
-                              >
-                                Suspend
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={actionLoadingId === b.id}
-                                onClick={() => handleUpdateStatus(b.id, 'approved')}
-                                className="text-xs h-8 text-emerald-400 border-emerald-500/40 hover:bg-emerald-950/40"
-                              >
-                                Re-Activate
-                              </Button>
+                          {/* 5. Client Onboarding Module Toggle */}
+                          <td className="py-4 px-4">
+                            <div className="flex flex-col gap-1.5 items-start">
+                              <ModuleToggleSwitch
+                                enabled={Boolean(b.client_onboarding_enabled)}
+                                loading={isOnboardingLoading}
+                                onToggle={() =>
+                                  handleToggleClientOnboarding(
+                                    b.id,
+                                    Boolean(b.client_onboarding_enabled)
+                                  )
+                                }
+                                title={
+                                  b.client_onboarding_enabled
+                                    ? 'Click to disable Client Onboarding for this business'
+                                    : 'Click to enable Client Onboarding for this business'
+                                }
+                                activeColor="bg-cyan-600"
+                                activeText="text-cyan-300"
+                                icon={UserPlus}
+                                labelActive="Enabled"
+                                labelDisabled="Disabled"
+                              />
+                              {b.client_onboarding_requested && !b.client_onboarding_enabled && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 font-semibold bg-amber-950/70 border border-amber-500/40 px-2 py-0.5 rounded-full animate-pulse">
+                                  ⚡ Requested Activation
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* 6. Account Status */}
+                          <td className="py-4 px-4">
+                            {b.status === 'approved' && (
+                              <Badge variant="success" className="gap-1">
+                                <CheckCircle className="w-3 h-3" /> Approved
+                              </Badge>
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                            {b.status === 'pending_approval' && (
+                              <Badge variant="warning" className="gap-1">
+                                <Clock className="w-3 h-3" /> Pending Review
+                              </Badge>
+                            )}
+                            {b.status === 'suspended' && (
+                              <Badge variant="destructive" className="gap-1">
+                                <XCircle className="w-3 h-3" /> Suspended
+                              </Badge>
+                            )}
+                          </td>
+
+                          {/* 7. Registered */}
+                          <td className="py-4 px-4 text-xs font-mono text-slate-400">
+                            {formatSaDate(b.created_at)}
+                          </td>
+
+                          {/* 8. Approval Actions */}
+                          <td className="py-4 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {b.status === 'pending_approval' ? (
+                                <Button
+                                  size="sm"
+                                  disabled={isStatusLoading}
+                                  onClick={() => handleUpdateStatus(b.id, 'approved')}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs h-8 shadow-sm"
+                                >
+                                  {isStatusLoading ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1" />
+                                  ) : (
+                                    <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                                  )}
+                                  Approve Business
+                                </Button>
+                              ) : b.status === 'approved' ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isStatusLoading}
+                                  onClick={() => handleUpdateStatus(b.id, 'suspended')}
+                                  className="text-xs h-8 text-amber-400 border-amber-500/40 hover:bg-amber-950/40"
+                                >
+                                  {isStatusLoading ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mr-1" />
+                                  ) : null}
+                                  Suspend
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isStatusLoading}
+                                  onClick={() => handleUpdateStatus(b.id, 'approved')}
+                                  className="text-xs h-8 text-emerald-400 border-emerald-500/40 hover:bg-emerald-950/40"
+                                >
+                                  {isStatusLoading ? (
+                                    <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mr-1" />
+                                  ) : null}
+                                  Re-Activate
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
