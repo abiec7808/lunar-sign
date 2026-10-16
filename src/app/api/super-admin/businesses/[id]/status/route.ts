@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbQuery } from '@/lib/db';
 import { getAuthenticatedUserWithOrg } from '@/lib/auth/session';
+import { invalidateCalcOrgCache } from '@/lib/calc/service';
+import { invalidateOnboardingOrgCache } from '@/lib/onboarding/service';
 
 const UpdateBusinessStatusSchema = z.object({
   status: z.enum(['approved', 'pending_approval', 'suspended']).optional(),
@@ -78,6 +80,8 @@ export async function POST(
     }
 
     const org = res.rows[0];
+    invalidateCalcOrgCache(org.id);
+    invalidateOnboardingOrgCache(org.id);
 
     // Log super admin audit action (safe non-blocking)
     try {

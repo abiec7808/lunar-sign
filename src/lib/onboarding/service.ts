@@ -123,6 +123,20 @@ const DEFAULT_QUESTIONS: OnboardingQuestion[] = [
   },
 ];
 
+// Short 30s cache for org permission check to avoid repeating SELECT on every parallel request
+const orgOnboardingCache = new Map<
+  string,
+  { enabled: boolean; requested: boolean; expires: number }
+>();
+
+export function invalidateOnboardingOrgCache(orgId?: string) {
+  if (orgId) {
+    orgOnboardingCache.delete(orgId);
+  } else {
+    orgOnboardingCache.clear();
+  }
+}
+
 /**
  * Verifies if user has permission to access Client Onboarding for targetOrgId.
  */
@@ -148,22 +162,40 @@ export async function verifyOnboardingAccess(
     return { allowed: true, effectiveOrgId: effective };
   }
 
-  // Check organisation flags
-  const res = await dbQuery(
-    `SELECT client_onboarding_enabled, client_onboarding_requested FROM organisations WHERE id = $1 LIMIT 1`,
-    [session.orgId]
-  );
+  // Check 30s cache first
+  const now = Date.now();
+  const cached = orgOnboardingCache.get(session.orgId);
+  let isEnabled = false;
+  let isRequested = false;
 
-  if (res.rows.length === 0) {
-    return { allowed: false, effectiveOrgId: session.orgId, error: 'Organisation not found' };
+  if (cached && cached.expires > now) {
+    isEnabled = cached.enabled;
+    isRequested = cached.requested;
+  } else {
+    const res = await dbQuery(
+      `SELECT client_onboarding_enabled, client_onboarding_requested FROM organisations WHERE id = $1 LIMIT 1`,
+      [session.orgId]
+    );
+
+    if (res.rows.length === 0) {
+      return { allowed: false, effectiveOrgId: session.orgId, error: 'Organisation not found' };
+    }
+
+    const org = res.rows[0];
+    isEnabled = Boolean(org.client_onboarding_enabled);
+    isRequested = Boolean(org.client_onboarding_requested);
+    orgOnboardingCache.set(session.orgId, {
+      enabled: isEnabled,
+      requested: isRequested,
+      expires: now + 30000,
+    });
   }
 
-  const org = res.rows[0];
-  if (!org.client_onboarding_enabled) {
+  if (!isEnabled) {
     return {
       allowed: false,
       effectiveOrgId: session.orgId,
-      requested: Boolean(org.client_onboarding_requested),
+      requested: isRequested,
       error: 'Client Onboarding module is not enabled for your business account.',
     };
   }
@@ -384,25 +416,25 @@ export async function createOnboardingInvite(
     'https://lunar-sign.netlify.app';
   const inviteUrl = `${domain}/onboard/${token}`;
 
-  // Optionally send invitation email immediately
+  // Send invitation email in background so response returns instantly
   if (params.sendEmail && params.email) {
-    const orgRes = await dbQuery(
+    dbQuery(
       `SELECT name FROM organisations WHERE id = $1 LIMIT 1`,
       [orgId]
-    );
-    const orgName = orgRes.rows[0]?.name || 'Lunar Sign Partner';
-
-    try {
-      await emailService.sendClientOnboardingInvite({
-        to: params.email.trim().toLowerCase(),
-        businessName: orgName,
-        clientName: fullName || params.companyName || 'Valued Client',
-        onboardingUrl: inviteUrl,
-        customMessage: params.customMessage,
+    )
+      .then((orgRes) => {
+        const orgName = orgRes.rows[0]?.name || 'Lunar Sign Partner';
+        return emailService.sendClientOnboardingInvite({
+          to: params.email!.trim().toLowerCase(),
+          businessName: orgName,
+          clientName: fullName || params.companyName || 'Valued Client',
+          onboardingUrl: inviteUrl,
+          customMessage: params.customMessage,
+        });
+      })
+      .catch((emailErr) => {
+        console.warn('Warning sending client onboarding invite email:', emailErr);
       });
-    } catch (emailErr) {
-      console.warn('Warning sending client onboarding invite email:', emailErr);
-    }
   }
 
   return { submission, inviteUrl };
@@ -614,31 +646,18 @@ export async function submitClientOnboarding(
     clientId = newClient.rows[0].id;
   }
 
-  // 3. SYNCHRONIZE INTO ADDRESS BOOK (contacts)
-  const existingContact = await dbQuery(
-    `SELECT id FROM contacts WHERE org_id = $1 AND LOWER(email) = $2 LIMIT 1`,
-    [orgId, email]
+  // 3 & 4. Concurrently synchronize into Contacts and finalize Submission in parallel
+  const contactUpsertQuery = dbQuery(
+    `INSERT INTO contacts (org_id, name, email, phone, role)
+     VALUES ($1, $2, $3, $4, 'signer')
+     ON CONFLICT (org_id, email) DO UPDATE
+     SET name = EXCLUDED.name,
+         phone = COALESCE(EXCLUDED.phone, contacts.phone),
+         updated_at = NOW()`,
+    [orgId, fullName, email, primaryPhone]
   );
 
-  if (existingContact.rows.length > 0) {
-    await dbQuery(
-      `UPDATE contacts
-       SET name = $1, phone = $2, updated_at = NOW()
-       WHERE id = $3`,
-      [fullName, primaryPhone, existingContact.rows[0].id]
-    );
-  } else {
-    await dbQuery(
-      `INSERT INTO contacts (org_id, name, email, phone, role)
-       VALUES ($1, $2, $3, $4, 'signer')
-       ON CONFLICT (org_id, email) DO UPDATE
-       SET name = EXCLUDED.name, phone = EXCLUDED.phone, updated_at = NOW()`,
-      [orgId, fullName, email, primaryPhone]
-    );
-  }
-
-  // 4. Update Onboarding Submission
-  await dbQuery(
+  const submissionUpdateQuery = dbQuery(
     `UPDATE onboarding_submissions
      SET status = 'submitted',
          client_id = $1,
@@ -678,6 +697,8 @@ export async function submitClientOnboarding(
     ]
   );
 
+  await Promise.all([contactUpsertQuery, submissionUpdateQuery]);
+
   const domain =
     payload.baseUrl ||
     process.env.NEXT_PUBLIC_APP_URL ||
@@ -685,9 +706,9 @@ export async function submitClientOnboarding(
   const viewUrl = `${domain}/onboard/${token}`;
   const submittedAtFormatted = formatSaDate(new Date());
 
-  // 5. Send notification to Business Owner
-  try {
-    await emailService.sendClientOnboardingCompleted({
+  // 5 & 6. Send notification to Business Owner and confirmation receipt to Client in parallel
+  await Promise.allSettled([
+    emailService.sendClientOnboardingCompleted({
       to: orgReplyTo,
       businessName: orgName,
       clientName: fullName,
@@ -698,14 +719,8 @@ export async function submitClientOnboarding(
       submittedAtFormatted,
       viewUrl,
       isClientReceipt: false,
-    });
-  } catch (err) {
-    console.warn('Warning sending business owner completion alert email:', err);
-  }
-
-  // 6. Send confirmation receipt to Client
-  try {
-    await emailService.sendClientOnboardingCompleted({
+    }),
+    emailService.sendClientOnboardingCompleted({
       to: email,
       businessName: orgName,
       clientName: fullName,
@@ -716,10 +731,8 @@ export async function submitClientOnboarding(
       submittedAtFormatted,
       viewUrl,
       isClientReceipt: true,
-    });
-  } catch (err) {
-    console.warn('Warning sending client completion confirmation email:', err);
-  }
+    }),
+  ]);
 
   return { success: true, submissionId: current.id, clientId };
 }

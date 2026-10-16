@@ -29,29 +29,36 @@ export async function GET() {
     const clientOnboardingEnabled = Boolean(data.client_onboarding_enabled || isSuperAdmin);
     const clientOnboardingRequested = Boolean(data.client_onboarding_requested);
 
-    return NextResponse.json({
-      user: {
-        userId: session.userId,
-        orgId: data.id,
-        email: data.email,
-        fullName: data.full_name,
-        role: data.role,
-        isSuperAdmin,
-        lunarCalcEnabled,
-        clientOnboardingEnabled,
-        clientOnboardingRequested,
-        orgName: data.name,
-        orgSlug: data.slug,
-        vatNumber: data.vat_number,
-        companyRegNumber: data.company_reg_number,
-        phone: data.phone,
-        address: data.address,
-        logoUrl: data.logo_url,
-        primaryColor: data.primary_color,
-        accentColor: data.accent_color,
-        createdAt: session.createdAt,
+    return NextResponse.json(
+      {
+        user: {
+          userId: session.userId,
+          orgId: data.id,
+          email: data.email,
+          fullName: data.full_name,
+          role: data.role,
+          isSuperAdmin,
+          lunarCalcEnabled,
+          clientOnboardingEnabled,
+          clientOnboardingRequested,
+          orgName: data.name,
+          orgSlug: data.slug,
+          vatNumber: data.vat_number,
+          companyRegNumber: data.company_reg_number,
+          phone: data.phone,
+          address: data.address,
+          logoUrl: data.logo_url,
+          primaryColor: data.primary_color,
+          accentColor: data.accent_color,
+          createdAt: session.createdAt,
+        },
       },
-    });
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=3, stale-while-revalidate=15',
+        },
+      }
+    );
   } catch (err: any) {
     console.error('Error in /api/auth/me:', err);
     return NextResponse.json({ user: null });

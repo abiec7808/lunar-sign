@@ -71,6 +71,17 @@ export interface CalcSummary {
   };
 }
 
+// Short 30s cache for org permission check to avoid repeating SELECT on every parallel request
+const orgCalcCache = new Map<string, { enabled: boolean; expires: number }>();
+
+export function invalidateCalcOrgCache(orgId?: string) {
+  if (orgId) {
+    orgCalcCache.delete(orgId);
+  } else {
+    orgCalcCache.clear();
+  }
+}
+
 /**
  * Checks whether user has permission to access Lunar Calc for given targetOrgId.
  * Super Admin (or admin@lunarposgeorge.co.za) has unconditional access and can inspect any org.
@@ -93,13 +104,22 @@ export async function verifyCalcAccess(
     return { allowed: true, effectiveOrgId: effective };
   }
 
-  // Non super admin: only allowed to see their own org IF lunar_calc_enabled is true
-  const res = await dbQuery(
-    `SELECT lunar_calc_enabled FROM organisations WHERE id = $1 LIMIT 1`,
-    [session.orgId]
-  );
+  // Check 30s cache first
+  const now = Date.now();
+  const cached = orgCalcCache.get(session.orgId);
+  let isEnabled = false;
 
-  const isEnabled = Boolean(res.rows[0]?.lunar_calc_enabled);
+  if (cached && cached.expires > now) {
+    isEnabled = cached.enabled;
+  } else {
+    const res = await dbQuery(
+      `SELECT lunar_calc_enabled FROM organisations WHERE id = $1 LIMIT 1`,
+      [session.orgId]
+    );
+    isEnabled = Boolean(res.rows[0]?.lunar_calc_enabled);
+    orgCalcCache.set(session.orgId, { enabled: isEnabled, expires: now + 30000 });
+  }
+
   if (!isEnabled) {
     return {
       allowed: false,
@@ -236,30 +256,30 @@ export async function getClientsWithCalculations(orgId: string): Promise<{
   clients: CalcClient[];
   summary: CalcSummary;
 }> {
-  // 1. Fetch clients
-  const clientsRes = await dbQuery(
-    `SELECT id, org_id, name, contact_person, email, phone, notes, status, created_at, updated_at
-     FROM calc_clients
-     WHERE org_id = $1
-     ORDER BY created_at DESC, name ASC`,
-    [orgId]
-  );
-
-  // 2. Fetch all license items for these clients with joined product info
-  const itemsRes = await dbQuery(
-    `SELECT ci.id, ci.client_id, ci.product_id, ci.quantity, ci.notes,
-            ci.custom_cost_price::float, ci.custom_selling_price::float,
-            p.name as product_name, p.code as product_code,
-            p.cost_price::float as default_cost_price,
-            p.selling_price::float as default_selling_price,
-            p.billing_cycle
-     FROM calc_client_items ci
-     JOIN calc_clients c ON ci.client_id = c.id
-     JOIN calc_products p ON ci.product_id = p.id
-     WHERE c.org_id = $1
-     ORDER BY p.name ASC`,
-    [orgId]
-  );
+  // 1 & 2. Concurrently fetch clients and their license items
+  const [clientsRes, itemsRes] = await Promise.all([
+    dbQuery(
+      `SELECT id, org_id, name, contact_person, email, phone, notes, status, created_at, updated_at
+       FROM calc_clients
+       WHERE org_id = $1
+       ORDER BY created_at DESC, name ASC`,
+      [orgId]
+    ),
+    dbQuery(
+      `SELECT ci.id, ci.client_id, ci.product_id, ci.quantity, ci.notes,
+              ci.custom_cost_price::float, ci.custom_selling_price::float,
+              p.name as product_name, p.code as product_code,
+              p.cost_price::float as default_cost_price,
+              p.selling_price::float as default_selling_price,
+              p.billing_cycle
+       FROM calc_client_items ci
+       JOIN calc_clients c ON ci.client_id = c.id
+       JOIN calc_products p ON ci.product_id = p.id
+       WHERE c.org_id = $1
+       ORDER BY p.name ASC`,
+      [orgId]
+    ),
+  ]);
 
   // Group items by client_id
   const itemsByClient = new Map<string, CalcClientItem[]>();
@@ -457,11 +477,20 @@ export async function saveClientItem(
     notes?: string | null;
   }
 ) {
-  // Validate client belongs to org
-  const clientCheck = await dbQuery(
-    `SELECT id FROM calc_clients WHERE id = $1 AND org_id = $2 LIMIT 1`,
-    [clientId, orgId]
-  );
+  // Concurrently validate client and check existing item line in single round-trip
+  const [clientCheck, existing] = await Promise.all([
+    dbQuery(
+      `SELECT id FROM calc_clients WHERE id = $1 AND org_id = $2 LIMIT 1`,
+      [clientId, orgId]
+    ),
+    !data.id
+      ? dbQuery(
+          `SELECT id, quantity FROM calc_client_items WHERE client_id = $1 AND product_id = $2 LIMIT 1`,
+          [clientId, data.product_id]
+        )
+      : Promise.resolve({ rows: [] as any[] }),
+  ]);
+
   if (clientCheck.rows.length === 0) {
     throw new Error('Client not found or unauthorized');
   }
@@ -488,12 +517,6 @@ export async function saveClientItem(
     );
     return res.rows[0];
   } else {
-    // Check if client already has this product line, if so update quantity
-    const existing = await dbQuery(
-      `SELECT id, quantity FROM calc_client_items WHERE client_id = $1 AND product_id = $2 LIMIT 1`,
-      [clientId, data.product_id]
-    );
-
     if (existing.rows.length > 0) {
       const newQty = existing.rows[0].quantity + qty;
       const res = await dbQuery(

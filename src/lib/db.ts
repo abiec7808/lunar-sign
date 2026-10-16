@@ -13,29 +13,37 @@ declare global {
   var __dbPool: Pool | undefined;
 }
 
-const pool =
-  global.__dbPool ||
-  new Pool({
-    connectionString,
-    ssl: {
-      rejectUnauthorized: false,
-    },
-    max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-  });
+function getPoolInstance(): Pool {
+  if (!global.__dbPool) {
+    global.__dbPool = new Pool({
+      connectionString,
+      ssl: {
+        rejectUnauthorized: false,
+      },
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
+    });
 
-if (process.env.NODE_ENV !== 'production') {
-  global.__dbPool = pool;
+    global.__dbPool.on('error', (err) => {
+      console.error('[DB Pool Idle Error]', err);
+    });
+  }
+  return global.__dbPool;
 }
+
+export const pool = getPoolInstance();
 
 export async function dbQuery<T extends QueryResultRow = any>(
   text: string,
   params?: any[]
 ): Promise<QueryResult<T>> {
+  const p = getPoolInstance();
   const start = Date.now();
   try {
-    const res = await pool.query<T>(text, params);
+    const res = await p.query<T>(text, params);
     const duration = Date.now() - start;
     if (process.env.NODE_ENV === 'development') {
       console.log(`[DB Query] ${text.substring(0, 60)}... (${duration}ms, ${res.rowCount} rows)`);
@@ -48,8 +56,7 @@ export async function dbQuery<T extends QueryResultRow = any>(
 }
 
 export async function getDbClient() {
-  const client = await pool.connect();
+  const p = getPoolInstance();
+  const client = await p.connect();
   return client;
 }
-
-export { pool };

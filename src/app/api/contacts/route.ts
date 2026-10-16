@@ -46,33 +46,20 @@ export async function POST(req: NextRequest) {
 
     const email = validated.email.trim().toLowerCase();
 
-    // Check if contact already exists in this organisation
-    const existing = await dbQuery(
-      `SELECT id FROM contacts WHERE org_id = $1 AND LOWER(email) = $2 LIMIT 1`,
-      [session.orgId, email]
-    );
-
-    if (existing.rows.length > 0) {
-      // Update existing contact
-      const updated = await dbQuery(
-        `UPDATE contacts
-         SET name = $1, phone = $2, role = $3, updated_at = NOW()
-         WHERE id = $4 AND org_id = $5
-         RETURNING *`,
-        [validated.name.trim(), validated.phone || null, validated.role, existing.rows[0].id, session.orgId]
-      );
-      return NextResponse.json({ contact: updated.rows[0], updated: true });
-    }
-
-    // Insert new contact
-    const inserted = await dbQuery(
+    // Atomic upsert in a single round-trip
+    const res = await dbQuery(
       `INSERT INTO contacts (org_id, name, email, phone, role)
        VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (org_id, email) DO UPDATE
+       SET name = EXCLUDED.name,
+           phone = COALESCE(EXCLUDED.phone, contacts.phone),
+           role = EXCLUDED.role,
+           updated_at = NOW()
        RETURNING *`,
       [session.orgId, validated.name.trim(), email, validated.phone || null, validated.role]
     );
 
-    return NextResponse.json({ contact: inserted.rows[0], created: true }, { status: 201 });
+    return NextResponse.json({ contact: res.rows[0], success: true }, { status: 201 });
   } catch (err: any) {
     console.error('Error saving contact:', err);
     return NextResponse.json({ error: err?.message || 'Failed to save contact' }, { status: 400 });
