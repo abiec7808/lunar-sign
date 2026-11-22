@@ -10,11 +10,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params;
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const orgId = auth.orgId;
 
     const res = await dbQuery(
-      `SELECT * FROM templates WHERE id::text = $1 AND (org_id = $2 OR $3 = true OR org_id = '11111111-1111-1111-1111-111111111111' OR $2 = '11111111-1111-1111-1111-111111111111') LIMIT 1`,
-      [id, orgId, !!auth?.isSuperAdmin]
+      `SELECT * FROM templates WHERE id::text = $1 AND org_id = $2 LIMIT 1`,
+      [id, orgId]
     );
 
     if (res.rows.length === 0) {
@@ -24,7 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const tpl = res.rows[0];
 
     // Increment usage count
-    await dbQuery(`UPDATE templates SET usage_count = usage_count + 1 WHERE id::text = $1`, [id]);
+    await dbQuery(`UPDATE templates SET usage_count = usage_count + 1 WHERE id::text = $1 AND org_id = $2`, [id, orgId]);
 
     return NextResponse.json({ template: tpl });
   } catch (err: any) {
@@ -51,12 +54,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     } = body;
 
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const orgId = auth.orgId;
 
     // Verify template exists and belongs to this organization
     const existing = await dbQuery(
-      `SELECT * FROM templates WHERE id::text = $1 AND (org_id = $2 OR $3 = true OR org_id = '11111111-1111-1111-1111-111111111111' OR $2 = '11111111-1111-1111-1111-111111111111') LIMIT 1`,
-      [id, orgId, !!auth?.isSuperAdmin]
+      `SELECT * FROM templates WHERE id::text = $1 AND org_id = $2 LIMIT 1`,
+      [id, orgId]
     );
 
     if (existing.rows.length === 0) {
@@ -113,7 +119,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
            field_definitions = $5,
            recipient_roles = $6,
            updated_at = NOW()
-       WHERE id::text = $7
+       WHERE id::text = $7 AND org_id = $8
        RETURNING *`,
       [
         newName,
@@ -123,6 +129,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         updatedFieldDefs,
         updatedRoles,
         id,
+        orgId,
       ]
     );
 
@@ -144,11 +151,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     const { id } = await params;
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const orgId = auth.orgId;
 
     const res = await dbQuery(
-      `DELETE FROM templates WHERE id::text = $1 AND (org_id = $2 OR $3 = true OR org_id = '11111111-1111-1111-1111-111111111111' OR $2 = '11111111-1111-1111-1111-111111111111') RETURNING id, name`,
-      [id, orgId, !!auth?.isSuperAdmin]
+      `DELETE FROM templates WHERE id::text = $1 AND org_id = $2 RETURNING id, name`,
+      [id, orgId]
     );
 
     if (res.rows.length === 0) {

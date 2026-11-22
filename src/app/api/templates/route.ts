@@ -9,14 +9,17 @@ import { parseFieldOptions, getSmartFieldOptions } from '@/lib/utils';
 export async function GET(req: NextRequest) {
   try {
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const orgId = auth.orgId;
 
     const res = await dbQuery(
       `SELECT id, name, description, storage_path_pdf, pdf_base64, field_definitions, recipient_roles, usage_count, created_at, updated_at
        FROM templates
-       WHERE org_id = $1 OR $2 = true OR org_id = '11111111-1111-1111-1111-111111111111' OR $1 = '11111111-1111-1111-1111-111111111111'
+       WHERE org_id = $1
        ORDER BY created_at DESC`,
-      [orgId, !!auth?.isSuperAdmin]
+      [orgId]
     );
 
     return NextResponse.json({ templates: res.rows });
@@ -41,8 +44,11 @@ export async function POST(req: NextRequest) {
     }
 
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
-    const userId = auth?.userId || '22222222-2222-2222-2222-222222222222';
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const orgId = auth.orgId;
+    const userId = auth.userId;
     const cleanName = name.trim();
 
     // Sanitize recipient roles to be generic (no hardcoded person names)

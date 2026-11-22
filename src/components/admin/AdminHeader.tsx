@@ -46,8 +46,8 @@ export function AdminHeader({ title, subtitle, actionButton }: AdminHeaderProps)
     }
   };
 
-  const displayName = user?.fullName || 'Lunar Administrator';
-  const displayEmail = user?.email || 'admin@lunarposgeorge.co.za';
+  const displayName = user?.fullName || 'Administrator';
+  const displayEmail = user?.email || '';
   const initials = displayName
     .split(' ')
     .map((n) => n[0])

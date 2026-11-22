@@ -15,33 +15,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { recipientId, type = 'signature_request' } = body;
 
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
-    const isSuperAdmin = !!auth?.isSuperAdmin;
-    const senderName = auth?.fullName || 'Lunar Administrator';
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const senderName = auth.fullName || 'Administrator';
 
-    // Verify document exists
-    let docRes = await dbQuery(
+    // Verify document exists and belongs to this organization
+    const docRes = await dbQuery(
       `SELECT d.*, o.name as org_name, o.custom_domain as org_custom_domain
        FROM documents d
        LEFT JOIN organisations o ON d.org_id = o.id
-       WHERE d.id::text = $1 AND (d.org_id = $2 OR $3 = true)
+       WHERE d.id::text = $1 AND d.org_id = $2
        LIMIT 1`,
-      [id, orgId, isSuperAdmin]
+      [id, auth.orgId]
     );
 
     if (docRes.rows.length === 0) {
-      docRes = await dbQuery(
-        `SELECT d.*, o.name as org_name, o.custom_domain as org_custom_domain
-         FROM documents d
-         LEFT JOIN organisations o ON d.org_id = o.id
-         WHERE d.id::text = $1
-         LIMIT 1`,
-        [id]
-      );
-    }
-
-    if (docRes.rows.length === 0) {
-      return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Document not found or access denied' }, { status: 404 });
     }
 
     const doc = docRes.rows[0];

@@ -7,7 +7,10 @@ import { hashPassword } from '@/lib/auth/passwords';
 export async function GET(req: NextRequest) {
   try {
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const orgId = auth.orgId;
 
     const orgRes = await dbQuery('SELECT max_users FROM organisations WHERE id = $1', [orgId]);
     const maxUsers = orgRes.rows[0]?.max_users || 5;

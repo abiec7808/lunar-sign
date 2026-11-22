@@ -51,8 +51,10 @@ const CreateDocumentSchema = z.object({
 export async function GET(req: NextRequest) {
   try {
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
-    const isSuperAdmin = !!auth?.isSuperAdmin;
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const orgId = auth.orgId;
 
     const docsRes = await dbQuery(
       `SELECT d.*,
@@ -61,10 +63,10 @@ export async function GET(req: NextRequest) {
               json_agg(json_build_object('id', r.id, 'name', r.name, 'email', r.email, 'status', r.status, 'role', r.role, 'order_index', r.order_index) ORDER BY r.order_index ASC) FILTER (WHERE r.id IS NOT NULL) as recipients_list
        FROM documents d
        LEFT JOIN recipients r ON d.id = r.document_id
-       WHERE d.org_id = $1 OR $2 = true OR d.org_id = '11111111-1111-1111-1111-111111111111' OR $1 = '11111111-1111-1111-1111-111111111111'
+       WHERE d.org_id = $1
        GROUP BY d.id
        ORDER BY d.created_at DESC`,
-      [orgId, isSuperAdmin]
+      [orgId]
     );
 
     // Asynchronously check for expiring documents and send 1-day reminders if needed
@@ -88,9 +90,12 @@ export async function POST(req: NextRequest) {
     const validated = CreateDocumentSchema.parse(body);
 
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
-    const userId = auth?.userId || '22222222-2222-2222-2222-222222222222';
-    const senderName = auth?.fullName || 'Lunar Administrator';
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const orgId = auth.orgId;
+    const userId = auth.userId;
+    const senderName = auth.fullName || 'Administrator';
 
     // Check organisation status, custom domain, and document limit (10 documents limit)
     const orgCheck = await dbQuery(
@@ -399,9 +404,11 @@ export async function DELETE(req: NextRequest) {
     }
 
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
-    const isSuperAdmin = !!auth?.isSuperAdmin;
-    const senderName = auth?.fullName || 'Administrator';
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const orgId = auth.orgId;
+    const senderName = auth.fullName || 'Administrator';
 
     if (action === 'delete' || action === 'void_remove') {
       // If notifying signers on bulk void & remove
@@ -411,8 +418,8 @@ export async function DELETE(req: NextRequest) {
             `SELECT r.email, r.name, d.title, d.id as doc_id
              FROM recipients r
              JOIN documents d ON r.document_id = d.id
-             WHERE d.id::text = ANY($1) AND (d.org_id = $2 OR $3 = true OR d.org_id = '11111111-1111-1111-1111-111111111111' OR $2 = '11111111-1111-1111-1111-111111111111') AND r.status != 'signed'`,
-            [documentIds, orgId, isSuperAdmin]
+             WHERE d.id::text = ANY($1) AND d.org_id = $2 AND r.status != 'signed'`,
+            [documentIds, orgId]
           );
           for (const r of recipsRes.rows) {
             emailService
@@ -433,9 +440,9 @@ export async function DELETE(req: NextRequest) {
 
       const delRes = await dbQuery(
         `DELETE FROM documents
-         WHERE id::text = ANY($1) AND (org_id = $2 OR $3 = true OR org_id = '11111111-1111-1111-1111-111111111111' OR $2 = '11111111-1111-1111-1111-111111111111')
+         WHERE id::text = ANY($1) AND org_id = $2
          RETURNING id`,
-        [documentIds, orgId, isSuperAdmin]
+        [documentIds, orgId]
       );
 
       return NextResponse.json({
@@ -448,9 +455,9 @@ export async function DELETE(req: NextRequest) {
       const updateRes = await dbQuery(
         `UPDATE documents
          SET status = 'voided', voided_reason = $1, updated_at = NOW()
-         WHERE id::text = ANY($2) AND (org_id = $3 OR $4 = true OR org_id = '11111111-1111-1111-1111-111111111111' OR $3 = '11111111-1111-1111-1111-111111111111')
+         WHERE id::text = ANY($2) AND org_id = $3
          RETURNING id, title`,
-        [reason, documentIds, orgId, isSuperAdmin]
+        [reason, documentIds, orgId]
       );
 
       return NextResponse.json({
@@ -478,8 +485,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
-    const isSuperAdmin = !!auth?.isSuperAdmin;
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const orgId = auth.orgId;
     const isArchive = action === 'archive';
 
     const updateRes = await dbQuery(
@@ -487,9 +496,9 @@ export async function PATCH(req: NextRequest) {
        SET is_archived = $1,
            archived_at = CASE WHEN $1 = true THEN NOW() ELSE NULL END,
            updated_at = NOW()
-       WHERE id::text = ANY($2) AND (org_id = $3 OR $4 = true OR org_id = '11111111-1111-1111-1111-111111111111' OR $3 = '11111111-1111-1111-1111-111111111111')
+       WHERE id::text = ANY($2) AND org_id = $3
        RETURNING id, title`,
-      [isArchive, documentIds, orgId, isSuperAdmin]
+      [isArchive, documentIds, orgId]
     );
 
     return NextResponse.json({

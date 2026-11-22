@@ -8,15 +8,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params;
     const auth = await getAuthenticatedUserWithOrg();
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    // 1. Fetch Document
+    // 1. Fetch Document (strictly scoped to user's org)
     const docRes = await dbQuery(
       `SELECT d.*, o.name as org_name, o.slug as org_slug
        FROM documents d
        JOIN organisations o ON d.org_id = o.id
-       WHERE d.id::text = $1
+       WHERE d.id::text = $1 AND d.org_id = $2
        LIMIT 1`,
-      [id]
+      [id, auth.orgId]
     );
 
     if (docRes.rows.length === 0) {
@@ -76,13 +79,15 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     const { id } = await params;
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
-    const isSuperAdmin = !!auth?.isSuperAdmin;
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const orgId = auth.orgId;
 
     // Check if document exists and belongs to this organization
     const checkRes = await dbQuery(
-      `SELECT id, title, org_id FROM documents WHERE id::text = $1 AND (org_id = $2 OR $3 = true OR org_id = '11111111-1111-1111-1111-111111111111' OR $2 = '11111111-1111-1111-1111-111111111111') LIMIT 1`,
-      [id, orgId, isSuperAdmin]
+      `SELECT id, title, org_id FROM documents WHERE id::text = $1 AND org_id = $2 LIMIT 1`,
+      [id, orgId]
     );
 
     if (checkRes.rows.length === 0) {
@@ -90,7 +95,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     // Delete document (cascade removes recipients, fields, signatures, and audit_events)
-    await dbQuery(`DELETE FROM documents WHERE id::text = $1`, [id]);
+    await dbQuery(`DELETE FROM documents WHERE id::text = $1 AND org_id = $2`, [id, orgId]);
 
     return NextResponse.json({
       success: true,
@@ -112,13 +117,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { action = 'void', reason = 'Voided by administrator', remove = false } = body;
 
     const auth = await getAuthenticatedUserWithOrg();
-    const orgId = auth?.orgId || '11111111-1111-1111-1111-111111111111';
-    const isSuperAdmin = !!auth?.isSuperAdmin;
-    const senderName = auth?.fullName || 'Administrator';
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const orgId = auth.orgId;
+    const senderName = auth.fullName || 'Administrator';
 
     const checkRes = await dbQuery(
-      `SELECT id, title, org_id, status FROM documents WHERE id::text = $1 AND (org_id = $2 OR $3 = true OR org_id = '11111111-1111-1111-1111-111111111111' OR $2 = '11111111-1111-1111-1111-111111111111') LIMIT 1`,
-      [id, orgId, isSuperAdmin]
+      `SELECT id, title, org_id, status FROM documents WHERE id::text = $1 AND org_id = $2 LIMIT 1`,
+      [id, orgId]
     );
 
     if (checkRes.rows.length === 0) {
@@ -130,8 +137,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Handle Archive / Unarchive actions
     if (action === 'archive') {
       await dbQuery(
-        `UPDATE documents SET is_archived = true, archived_at = NOW(), updated_at = NOW() WHERE id::text = $1`,
-        [id]
+        `UPDATE documents SET is_archived = true, archived_at = NOW(), updated_at = NOW() WHERE id::text = $1 AND org_id = $2`,
+        [id, orgId]
       );
       await dbQuery(
         `INSERT INTO audit_events (document_id, actor_type, event_type, description)
@@ -146,8 +153,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     if (action === 'unarchive') {
       await dbQuery(
-        `UPDATE documents SET is_archived = false, archived_at = NULL, updated_at = NOW() WHERE id::text = $1`,
-        [id]
+        `UPDATE documents SET is_archived = false, archived_at = NULL, updated_at = NOW() WHERE id::text = $1 AND org_id = $2`,
+        [id, orgId]
       );
       await dbQuery(
         `INSERT INTO audit_events (document_id, actor_type, event_type, description)
@@ -184,7 +191,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
       }
 
-      await dbQuery(`DELETE FROM documents WHERE id::text = $1`, [id]);
+      await dbQuery(`DELETE FROM documents WHERE id::text = $1 AND org_id = $2`, [id, orgId]);
 
       return NextResponse.json({
         success: true,
@@ -194,8 +201,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Otherwise mark status as 'voided' and record audit log
     await dbQuery(
-      `UPDATE documents SET status = 'voided', voided_reason = $1, updated_at = NOW() WHERE id::text = $2`,
-      [reason, id]
+      `UPDATE documents SET status = 'voided', voided_reason = $1, updated_at = NOW() WHERE id::text = $2 AND org_id = $3`,
+      [reason, id, orgId]
     );
 
     await dbQuery(

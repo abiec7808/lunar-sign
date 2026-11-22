@@ -44,15 +44,15 @@ export async function GET(
     } else {
       // Try finding template in templates table by title
       let tplBase64: string | null = null;
-      if (doc?.title) {
+      if (doc?.title && doc?.org_id) {
         try {
           const tplCheck = await dbQuery(
             `SELECT pdf_base64 FROM templates
-             WHERE (org_id = $1 OR org_id = '11111111-1111-1111-1111-111111111111')
+             WHERE org_id = $1
                AND (LOWER(name) = LOWER($2) OR LOWER(name) LIKE '%' || LOWER($2) || '%' OR LOWER($2) LIKE '%' || LOWER(name) || '%')
                AND pdf_base64 IS NOT NULL
              LIMIT 1`,
-            [doc.org_id || '11111111-1111-1111-1111-111111111111', doc.title]
+            [doc.org_id, doc.title]
           );
           if (tplCheck.rows.length > 0 && tplCheck.rows[0].pdf_base64) {
             tplBase64 = tplCheck.rows[0].pdf_base64;
